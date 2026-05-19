@@ -1,0 +1,65 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go
+*.o
+*.a
+*.test
+*.out
+vendor/
+go.work.sum
+
+# Build
+dist/
+_output/
+cover.out
+coverage.html
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Kubernetes
+*.kubeconfig
+kubeconfig
+
+# Container
+Dockerfile.cross
+
+# Helm
+charts/kompakt/charts/
+
+# Temporary
+tmp/
+temp/
+
+# Python
+.venv/
+__pycache__/
+
+# Environment
+.env
+.env.*
+
+# AI
+.claude/
+.claude.*
+CLAUDE.md
+.cursorrules
+.cursor/
+.copilot/
+.aider*
+.continue/
+.codeium/
+.windsurf/
+.tabnine/
+PRD.md
