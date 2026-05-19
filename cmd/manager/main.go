@@ -16,6 +16,9 @@ import (
 	webhookadmission "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	packingv1alpha1 "github.com/reyshazni/kompakt/api/v1alpha1"
+	kompaktcontroller "github.com/reyshazni/kompakt/internal/controller"
+	"github.com/reyshazni/kompakt/internal/inflight"
+	"github.com/reyshazni/kompakt/internal/ledger"
 	"github.com/reyshazni/kompakt/internal/matcher"
 	kompaktwebhook "github.com/reyshazni/kompakt/internal/webhook"
 )
@@ -68,6 +71,20 @@ func main() {
 	resolver := matcher.NewProfileResolver(mgr.GetAPIReader())
 	injector := kompaktwebhook.NewPodGateInjector(resolver)
 	mgr.GetWebhookServer().Register("/mutate-v1-pod", &webhookadmission.Webhook{Handler: injector})
+
+	// Set up controller
+	nodeLedger := ledger.New()
+	detectors := []inflight.Detector{&inflight.ClusterAutoscalerDetector{}}
+	reconciler := &kompaktcontroller.PackingProfileReconciler{
+		Client:    mgr.GetClient(),
+		Ledger:    nodeLedger,
+		Detectors: detectors,
+		Recorder:  mgr.GetEventRecorderFor("kompakt-controller"), //nolint:staticcheck // new API not compatible with record.EventRecorder
+	}
+	if err := reconciler.SetupWithManager(mgr); err != nil {
+		log.Error(err, "unable to set up controller")
+		os.Exit(1)
+	}
 
 	log.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
