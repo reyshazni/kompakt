@@ -16,7 +16,7 @@ Direct pushes to `main` are restricted to maintainers.
 
 ## Prerequisites
 
-- Go 1.23+
+- Go 1.26+
 - Docker
 - kind (for local clusters)
 - kubectl

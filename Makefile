@@ -35,11 +35,11 @@ lint: lint-go lint-yaml ## Run all linters
 
 .PHONY: lint-go
 lint-go: ## Run Go linter
-	golangci-lint run
+	go tool golangci-lint run
 
 .PHONY: lint-yaml
 lint-yaml: ## Run YAML linter
-	yamllint -c .yamllint.yml config/ charts/kompakt/Chart.yaml charts/kompakt/values.yaml .github/
+	.venv/bin/yamllint -c .yamllint.yml config/ charts/kompakt/Chart.yaml charts/kompakt/values.yaml .github/
 
 .PHONY: deps
 deps: ## Download dependencies
