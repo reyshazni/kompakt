@@ -30,9 +30,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract tag
+      - name: Docker metadata
         id: meta
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+            type=sha,prefix=,format=short
 
       - name: Build and push image
         uses: docker/build-push-action@v6
@@ -40,9 +47,8 @@ jobs:
         with:
           context: .
           push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}
-            ghcr.io/${{ github.repository }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
@@ -50,16 +56,16 @@ jobs:
       - name: Sign image
         run: |
           cosign sign --yes \
-            ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}@${{ steps.build.outputs.digest }}
+            ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
-          image: ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}
+          image: ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}
           format: spdx-json
           output-file: sbom.spdx.json
 
       - name: Attach SBOM to image
         run: |
           cosign attach sbom --sbom sbom.spdx.json \
-            ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}@${{ steps.build.outputs.digest }}
+            ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}
