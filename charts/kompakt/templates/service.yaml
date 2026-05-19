@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kompakt.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kompakt.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "kompakt.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: webhook
+      port: 443
+      targetPort: webhook
+      protocol: TCP
+    {{- if .Values.metrics.enabled }}
+    - name: metrics
+      port: {{ .Values.metrics.port }}
+      targetPort: metrics
+      protocol: TCP
+    {{- end }}

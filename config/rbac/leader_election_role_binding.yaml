@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kompakt-leader-election
+  namespace: kompakt-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kompakt-leader-election
+subjects:
+  - kind: ServiceAccount
+    name: kompakt-controller
+    namespace: kompakt-system

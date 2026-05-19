@@ -1,0 +1,143 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: packingprofiles.packer.kompakt.io
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.0
+spec:
+  group: packer.kompakt.io
+  names:
+    kind: PackingProfile
+    listKind: PackingProfileList
+    plural: packingprofiles
+    singular: packingprofile
+    shortNames:
+      - pp
+  scope: Cluster
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Demand
+          type: string
+          jsonPath: .spec.demandSource.type
+        - name: Rules
+          type: string
+          jsonPath: .spec.rules[*].name
+        - name: Active Gates
+          type: integer
+          jsonPath: .status.activeGates
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: PackingProfile defines coordination behavior for a class of workloads.
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              type: object
+              required: [demandSource, capacitySource, readinessSignal, rules]
+              properties:
+                demandSource:
+                  type: object
+                  required: [type]
+                  properties:
+                    type:
+                      type: string
+                      enum: [ResourceRequest, Annotation]
+                    resources:
+                      type: array
+                      items:
+                        type: string
+                    annotation:
+                      type: string
+                    unit:
+                      type: string
+                capacitySource:
+                  type: object
+                  required: [type]
+                  properties:
+                    type:
+                      type: string
+                      enum: [NodeAllocatable, NodeLabel]
+                    resources:
+                      type: array
+                      items:
+                        type: string
+                    label:
+                      type: string
+                    perDeviceCount:
+                      type: object
+                      required: [label]
+                      properties:
+                        label:
+                          type: string
+                readinessSignal:
+                  type: object
+                  properties:
+                    nodeConditions:
+                      type: array
+                      items:
+                        type: object
+                        required: [type, status]
+                        properties:
+                          type:
+                            type: string
+                          status:
+                            type: string
+                    requiredLabels:
+                      type: array
+                      items:
+                        type: string
+                rules:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [name]
+                    properties:
+                      name:
+                        type: string
+                        enum:
+                          - BinPackOnInflightCapacity
+                          - WaitForImagePrePull
+                          - WaitForMIGProfile
+                          - WaitForCoLocation
+                reservationTimeout:
+                  type: string
+                  default: 3m
+            status:
+              type: object
+              properties:
+                activeGates:
+                  type: integer
+                  format: int32
+                activeReservations:
+                  type: integer
+                  format: int32
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string

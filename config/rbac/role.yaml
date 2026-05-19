@@ -1,0 +1,24 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kompakt-manager
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch, patch]
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list, watch]
+  - apiGroups: [packer.kompakt.io]
+    resources: [packingprofiles]
+    verbs: [get, list, watch]
+  - apiGroups: [packer.kompakt.io]
+    resources: [packingprofiles/status]
+    verbs: [update, patch]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [cluster-autoscaler-status]
+    verbs: [get, list, watch]

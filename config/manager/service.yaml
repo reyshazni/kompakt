@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kompakt-controller
+  namespace: kompakt-system
+  labels:
+    app.kubernetes.io/name: kompakt
+    app.kubernetes.io/component: controller
+spec:
+  selector:
+    app.kubernetes.io/name: kompakt
+    app.kubernetes.io/component: controller
+  ports:
+    - name: webhook
+      port: 443
+      targetPort: webhook
+      protocol: TCP
+    - name: metrics
+      port: 8080
+      targetPort: metrics
+      protocol: TCP
