@@ -14,13 +14,12 @@ help: ## Display this help
 
 .PHONY: generate
 generate: ## Generate code (deepcopy, CRDs)
-	go generate ./...
-	controller-gen object paths="./api/..."
-	controller-gen crd paths="./api/..." output:crd:artifacts:config=config/crd/bases
+	go tool controller-gen object paths="./api/..."
+	go tool controller-gen crd paths="./api/..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: manifests
 manifests: ## Generate RBAC and CRD manifests
-	controller-gen rbac:roleName=kompakt-manager crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases output:rbac:artifacts:config=config/rbac
+	go tool controller-gen rbac:roleName=kompakt-manager crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases output:rbac:artifacts:config=config/rbac
 
 .PHONY: fmt
 fmt: ## Run go fmt
@@ -39,7 +38,7 @@ lint-go: ## Run Go linter
 
 .PHONY: lint-yaml
 lint-yaml: ## Run YAML linter
-	.venv/bin/yamllint -c .yamllint.yml config/ charts/kompakt/Chart.yaml charts/kompakt/values.yaml .github/
+	.venv/bin/yamllint -c .yamllint.yml config/default/ config/manager/ config/rbac/ config/webhook/ charts/kompakt/Chart.yaml charts/kompakt/values.yaml .github/
 
 .PHONY: deps
 deps: ## Download dependencies

@@ -38,7 +38,7 @@ jobs:
       - name: Run yamllint
         run: |
           pip install -q yamllint
-          yamllint -c .yamllint.yml config/ charts/kompakt/Chart.yaml charts/kompakt/values.yaml .github/
+          yamllint -c .yamllint.yml config/default/ config/manager/ config/rbac/ config/webhook/ charts/kompakt/Chart.yaml charts/kompakt/values.yaml .github/
 
   test:
     name: Unit Tests
