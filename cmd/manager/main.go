@@ -13,8 +13,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	webhookadmission "sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	packingv1alpha1 "github.com/reyshazni/kompakt/api/v1alpha1"
+	"github.com/reyshazni/kompakt/internal/matcher"
+	kompaktwebhook "github.com/reyshazni/kompakt/internal/webhook"
 )
 
 var scheme = runtime.NewScheme()
@@ -60,6 +63,11 @@ func main() {
 		log.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
+
+	// Set up webhook
+	resolver := matcher.NewProfileResolver(mgr.GetAPIReader())
+	injector := kompaktwebhook.NewPodGateInjector(resolver)
+	mgr.GetWebhookServer().Register("/mutate-v1-pod", &webhookadmission.Webhook{Handler: injector})
 
 	log.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
