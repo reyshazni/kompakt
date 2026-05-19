@@ -29,34 +29,21 @@ jobs:
         with:
           go-version: "1.26"
 
+      - name: Install kustomize
+        uses: imranismail/setup-kustomize@v2
+
       - name: Create kind cluster
         uses: helm/kind-action@v1
         with:
           node_image: ${{ matrix.kind-image }}
-          cluster_name: kompakt-e2e
+          cluster_name: kompakt-dev
 
-      - name: Build image
+      - name: Setup and deploy
         run: |
-          docker build -t kompakt:e2e .
-          kind load docker-image kompakt:e2e --name kompakt-e2e
-
-      - name: Install CRDs
-        run: kubectl apply -f config/crd/bases/
-
-      - name: Deploy with kustomize
-        run: |
-          (cd config/manager && kustomize edit set image ghcr.io/reyshazni/kompakt=kompakt:e2e)
-          kustomize build config/default | kubectl apply -f -
-
-      - name: Wait for controller
-        run: |
-          kubectl -n kompakt-system wait --for=condition=available deployment/kompakt-controller --timeout=60s || \
-          kubectl -n kompakt-system describe pods
+          IMG=kompakt:e2e CLUSTER_NAME=kompakt-dev hack/e2e-setup.sh
 
       - name: Run e2e tests
-        run: go test -v -count=1 -timeout=10m ./test/e2e/...
-        env:
-          KUBECONFIG: ${{ env.KUBECONFIG }}
+        run: go test -v -count=1 -timeout=5m ./test/e2e/...
 
       - name: Collect logs on failure
         if: failure()

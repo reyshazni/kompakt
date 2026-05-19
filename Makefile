@@ -52,8 +52,9 @@ test: ## Run unit tests
 	go test $$(go list ./... | grep -v /test/e2e) -coverprofile cover.out
 
 .PHONY: test-e2e
-test-e2e: ## Run e2e tests (requires kind cluster)
-	go test ./test/e2e/... -v -count=1
+test-e2e: ## Run e2e tests (sets up kind + deploys)
+	IMG=kompakt:e2e hack/e2e-setup.sh
+	go test ./test/e2e/... -v -count=1 -timeout=5m
 
 ##@ Build
 

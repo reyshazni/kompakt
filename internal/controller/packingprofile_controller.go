@@ -20,15 +20,16 @@ import (
 )
 
 const (
-	labelProfile      = "packer.kompakt.io/packing-profile"
+	labelProfile       = "packer.kompakt.io/packing-profile"
 	annotationPriority = "kompakt.io/priority"
-	gatePrefix        = "kompakt.io/"
+	gatePrefix         = "kompakt.io/"
 )
 
 // PackingProfileReconciler reconciles gated pods by evaluating rules
 // against the node ledger and releasing gates when capacity is available.
 type PackingProfileReconciler struct {
 	client.Client
+	APIReader client.Reader
 	Ledger    *ledger.NodeLedger
 	Detectors []inflight.Detector
 	Recorder  record.EventRecorder
@@ -224,9 +225,14 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context) error {
 		r.Ledger.UpdateUsage(nodeName, used)
 	}
 
-	// Sync inflight nodes from detectors
+	// Sync inflight nodes from detectors using a direct (uncached) reader
+	// to avoid triggering cluster-scoped list/watch on restricted resources.
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
 	for _, d := range r.Detectors {
-		nodes, err := d.Detect(ctx, r.Client)
+		nodes, err := d.Detect(ctx, reader)
 		if err != nil {
 			continue
 		}
@@ -248,4 +254,3 @@ func isTimedOut(pod *corev1.Pod, profile *v1alpha1.PackingProfile) bool {
 	}
 	return time.Since(pod.CreationTimestamp.Time) > timeout
 }
-

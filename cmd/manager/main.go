@@ -7,7 +7,6 @@ import (
 	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/runtime/serializer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -26,7 +25,6 @@ import (
 var scheme = runtime.NewScheme()
 
 func init() {
-	utilruntime.NewCodecFactory(scheme)
 	_ = corev1.AddToScheme(scheme)
 	_ = coordinationv1.AddToScheme(scheme)
 	_ = packingv1alpha1.AddToScheme(scheme)
@@ -77,6 +75,7 @@ func main() {
 	detectors := []inflight.Detector{&inflight.ClusterAutoscalerDetector{}}
 	reconciler := &kompaktcontroller.PackingProfileReconciler{
 		Client:    mgr.GetClient(),
+		APIReader: mgr.GetAPIReader(),
 		Ledger:    nodeLedger,
 		Detectors: detectors,
 		Recorder:  mgr.GetEventRecorderFor("kompakt-controller"), //nolint:staticcheck // new API not compatible with record.EventRecorder

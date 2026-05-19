@@ -128,7 +128,7 @@ func TestReconcile_GateReleased_WhenCapacityAvailable(t *testing.T) {
 }
 
 func TestReconcile_GateStays_WhenNoCapacity(t *testing.T) {
-	pod := gatedPod("pod-1", 8000) // needs 8 cores
+	pod := gatedPod("pod-1", 8000)   // needs 8 cores
 	node := testNode("node-1", 2000) // only has 2 cores
 	profile := testProfile()
 
