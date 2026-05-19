@@ -100,6 +100,20 @@ kind-delete: ## Delete the kind cluster
 kind-load: ## Load docker image into kind
 	kind load docker-image ${IMG} --name kompakt-dev
 
+##@ Validation
+
+.PHONY: verify
+verify: fmt vet lint test helm-lint kustomize-build ## Run all checks (CI equivalent)
+
+.PHONY: helm-lint
+helm-lint: ## Lint and template Helm chart
+	helm lint charts/kompakt/
+	helm template kompakt charts/kompakt/ -n kompakt-system > /dev/null
+
+.PHONY: kustomize-build
+kustomize-build: ## Validate kustomize build
+	kustomize build config/default > /dev/null
+
 ##@ Docs
 
 .PHONY: open-docs
