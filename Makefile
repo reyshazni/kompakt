@@ -43,7 +43,7 @@ deps: ## Download dependencies
 
 .PHONY: test
 test: ## Run unit tests
-	go test ./... -coverprofile cover.out
+	go test $$(go list ./... | grep -v /test/e2e) -coverprofile cover.out
 
 .PHONY: test-e2e
 test-e2e: ## Run e2e tests (requires kind cluster)

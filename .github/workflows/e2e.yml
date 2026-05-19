@@ -45,9 +45,8 @@ jobs:
 
       - name: Deploy with kustomize
         run: |
-          cd config/manager && kustomize edit set image ghcr.io/reyshazni/kompakt=kompakt:e2e
+          (cd config/manager && kustomize edit set image ghcr.io/reyshazni/kompakt=kompakt:e2e)
           kustomize build config/default | kubectl apply -f -
-        working-directory: ${{ github.workspace }}
 
       - name: Wait for controller
         run: |
