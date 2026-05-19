@@ -2,28 +2,27 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
   name: kompakt-webhook
-spec:
-  webhooks:
-    - name: pod-gate-injector.kompakt.io
-      admissionReviewVersions: [v1]
-      clientConfig:
-        service:
-          name: kompakt-controller
-          namespace: kompakt-system
-          path: /mutate-v1-pod
-          port: 443
-      failurePolicy: Ignore
-      sideEffects: None
-      reinvocationPolicy: Never
-      timeoutSeconds: 5
-      rules:
-        - apiGroups: [""]
-          apiVersions: [v1]
-          operations: [CREATE]
-          resources: [pods]
-          scope: Namespaced
-      namespaceSelector:
-        matchExpressions:
-          - key: kubernetes.io/metadata.name
-            operator: NotIn
-            values: [kube-system, kube-public, kube-node-lease, kompakt-system]
+webhooks:
+  - name: pod-gate-injector.kompakt.io
+    admissionReviewVersions: [v1]
+    clientConfig:
+      service:
+        name: kompakt-controller
+        namespace: kompakt-system
+        path: /mutate-v1-pod
+        port: 443
+    failurePolicy: Ignore
+    sideEffects: None
+    reinvocationPolicy: Never
+    timeoutSeconds: 5
+    rules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE]
+        resources: [pods]
+        scope: Namespaced
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: [kube-system, kube-public, kube-node-lease, kompakt-system]

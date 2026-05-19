@@ -86,7 +86,7 @@ spec:
 	if err != nil {
 		t.Fatalf("failed to create PackingProfile: %s", string(out))
 	}
-	defer kubectl("delete", "packingprofile", "e2e-test-cpu", "--ignore-not-found")
+	defer func() { _, _ = kubectl("delete", "packingprofile", "e2e-test-cpu", "--ignore-not-found") }()
 
 	// Verify profile exists
 	out2, err := kubectl("get", "packingprofile", "e2e-test-cpu")
@@ -122,7 +122,7 @@ spec:
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("failed to create profile: %s", string(out))
 	}
-	defer kubectl("delete", "packingprofile", "e2e-gating-test", "--ignore-not-found")
+	defer func() { _, _ = kubectl("delete", "packingprofile", "e2e-gating-test", "--ignore-not-found") }()
 
 	// Create a pod with the profile label
 	pod := `
@@ -148,7 +148,7 @@ spec:
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("failed to create pod: %s", string(out))
 	}
-	defer kubectl("delete", "pod", "e2e-gated-pod", "-n", "default", "--ignore-not-found")
+	defer func() { _, _ = kubectl("delete", "pod", "e2e-gated-pod", "-n", "default", "--ignore-not-found") }()
 
 	// Verify the pod has a scheduling gate
 	waitFor(t, 10*time.Second, "pod to have scheduling gate", func() bool {
@@ -186,7 +186,7 @@ spec:
 	cmd := exec.Command("kubectl", "apply", "-f", "-")
 	cmd.Stdin = strings.NewReader(pod)
 	out, err := cmd.CombinedOutput()
-	defer kubectl("delete", "pod", "e2e-rejected-pod", "-n", "default", "--ignore-not-found")
+	defer func() { _, _ = kubectl("delete", "pod", "e2e-rejected-pod", "-n", "default", "--ignore-not-found") }()
 
 	// The webhook should reject this pod
 	if err == nil {
@@ -227,7 +227,7 @@ spec:
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("failed to create profile: %s", string(out))
 	}
-	defer kubectl("delete", "packingprofile", "e2e-exclude-test", "--ignore-not-found")
+	defer func() { _, _ = kubectl("delete", "packingprofile", "e2e-exclude-test", "--ignore-not-found") }()
 
 	// Create pod with both profile label and exclude label
 	pod := `
@@ -254,7 +254,7 @@ spec:
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("failed to create excluded pod: %s", string(out))
 	}
-	defer kubectl("delete", "pod", "e2e-excluded-pod", "-n", "default", "--ignore-not-found")
+	defer func() { _, _ = kubectl("delete", "pod", "e2e-excluded-pod", "-n", "default", "--ignore-not-found") }()
 
 	// Verify the pod does NOT have a scheduling gate
 	time.Sleep(2 * time.Second)
@@ -293,7 +293,7 @@ spec:
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("failed to create unlabeled pod: %s", string(out))
 	}
-	defer kubectl("delete", "pod", "e2e-unlabeled-pod", "-n", "default", "--ignore-not-found")
+	defer func() { _, _ = kubectl("delete", "pod", "e2e-unlabeled-pod", "-n", "default", "--ignore-not-found") }()
 
 	// Verify the pod does NOT have a scheduling gate
 	time.Sleep(2 * time.Second)

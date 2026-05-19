@@ -4,8 +4,7 @@ metadata:
   name: {{ include "kompakt.fullname" . }}
   labels:
     {{- include "kompakt.labels" . | nindent 4 }}
-spec:
-  webhooks:
+webhooks:
     - name: pod-gate-injector.kompakt.io
       admissionReviewVersions: [v1]
       clientConfig:

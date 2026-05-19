@@ -37,6 +37,11 @@ jobs:
         with:
           version: v1.62
 
+      - name: Run yamllint
+        run: |
+          pip install -q yamllint
+          yamllint -c .yamllint.yml config/ charts/kompakt/Chart.yaml charts/kompakt/values.yaml .github/
+
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
