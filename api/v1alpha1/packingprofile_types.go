@@ -132,8 +132,12 @@ type PackingProfileStatus struct {
 	// InflightNodes is the number of in-flight nodes detected for this profile.
 	InflightNodes int32 `json:"inflightNodes,omitempty"`
 
+	// ActiveDetectors lists the names of inflight detectors that found nodes
+	// in the last reconcile cycle. Empty if no detectors found anything.
+	ActiveDetectors []string `json:"activeDetectors,omitempty"`
+
 	// Conditions represent the latest available observations of the profile state.
-	// Known condition types: ProfileValid, LedgerReady, InflightDetectionActive.
+	// Known condition types: Ready, ProfileValid, LedgerReady, InflightDetectionActive.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
