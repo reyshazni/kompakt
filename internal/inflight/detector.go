@@ -13,8 +13,10 @@ import (
 
 // InflightNode represents a node being provisioned by the autoscaler.
 type InflightNode struct {
-	Name        string
-	Allocatable map[string]int64
+	Name         string
+	Allocatable  map[string]int64
+	Labels       map[string]string
+	InstanceType string
 }
 
 // Detector detects in-flight nodes from cloud-specific signals.

@@ -38,7 +38,6 @@ Health: ready=1, cloudProviderTarget=1`,
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// pool-cpu-4xlarge: 5-3 = 2 pending, pool-gpu: 1-1 = 0 pending
 	if len(nodes) != 2 {
 		t.Fatalf("expected 2 inflight nodes, got %d", len(nodes))
 	}
@@ -99,11 +98,9 @@ func TestDetect_PendingNodes_NameContainsGroup(t *testing.T) {
 	if len(nodes) != 2 {
 		t.Fatalf("expected 2 inflight nodes, got %d", len(nodes))
 	}
-	// Node names must contain the group name so the controller can match
-	// them against NodeGroupTemplates by prefix.
 	for _, n := range nodes {
 		if !strings.HasPrefix(n.Name, "pool-gpu") {
-			t.Fatalf("expected node name to start with group name 'pool-gpu', got %s", n.Name)
+			t.Fatalf("expected node name to start with 'pool-gpu', got %s", n.Name)
 		}
 	}
 }
@@ -138,7 +135,6 @@ func TestDetect_NodeNameFormat(t *testing.T) {
 }
 
 func TestDetect_NegativePending_ScaleDown(t *testing.T) {
-	// ready > target means scale-down in progress, should produce 0 pending
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-autoscaler-status",
@@ -179,7 +175,6 @@ func TestDetect_MalformedHealthLine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Malformed line should parse as 0-0=0 pending, not crash
 	if len(nodes) != 0 {
 		t.Fatalf("expected 0 nodes from malformed input, got %d", len(nodes))
 	}
@@ -208,7 +203,6 @@ Health: ready=0, cloudProviderTarget=1`,
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// pool-a: 2 pending, pool-b: 0 pending, pool-c: 1 pending = 3 total
 	if len(nodes) != 3 {
 		t.Fatalf("expected 3 inflight nodes, got %d", len(nodes))
 	}
@@ -245,7 +239,6 @@ func TestDetect_StatusKeyMissing(t *testing.T) {
 }
 
 func TestDetect_HealthWithoutName(t *testing.T) {
-	// Health line with no preceding Name line should be ignored
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-autoscaler-status",
@@ -263,7 +256,6 @@ func TestDetect_HealthWithoutName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// currentGroup is "" so the if condition `currentGroup != ""` skips it
 	if len(nodes) != 0 {
 		t.Fatalf("expected 0 nodes for Health without Name, got %d", len(nodes))
 	}

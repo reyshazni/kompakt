@@ -94,15 +94,18 @@ spec:
                             Must contain at least one resource entry.
                           minProperties: 1
                           type: object
+                        instanceType:
+                          description: |-
+                            InstanceType is the cloud instance type to match against inflight nodes.
+                            Used by GOATScaler detector (event message) and NotReady detector (node label).
+                          type: string
                         namePrefix:
                           description: |-
                             NamePrefix is the node group name prefix to match against inflight node names.
-                            Must not be empty.
-                          minLength: 1
+                            Used by ClusterAutoscaler detector (CA status ConfigMap names).
                           type: string
                       required:
                       - allocatable
-                      - namePrefix
                       type: object
                     type: array
                   perDeviceCount:
