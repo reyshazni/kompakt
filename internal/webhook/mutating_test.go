@@ -462,3 +462,54 @@ func TestHandle_ExcludeLabel_NonTrueValue(t *testing.T) {
 		t.Fatal("expected gates injected when exclude=false")
 	}
 }
+
+func TestHandle_WaitForScaleUp_GateInjected(t *testing.T) {
+	profile := &v1alpha1.PackingProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "scaleup-profile"},
+		Spec: v1alpha1.PackingProfileSpec{
+			DemandSource: v1alpha1.DemandSource{
+				Type:      "ResourceRequest",
+				Resources: []string{"cpu"},
+			},
+			Rules: []v1alpha1.RuleRef{
+				{Name: "WaitForScaleUp"},
+			},
+		},
+	}
+	fc := fake.NewClientBuilder().WithScheme(scheme()).WithObjects(profile).Build()
+	resolver := matcher.NewProfileResolver(fc)
+	injector := NewPodGateInjector(resolver)
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "scaleup-pod",
+			Namespace: "default",
+			Labels:    map[string]string{"packer.kompakt.io/packing-profile": "scaleup-profile"},
+		},
+	}
+
+	resp := injector.Handle(context.Background(), makeRequest(pod))
+	if !resp.Allowed {
+		t.Fatalf("expected allowed, got denied: %s", resp.Result.Message)
+	}
+	if len(resp.Patches) == 0 {
+		t.Fatal("expected patches for WaitForScaleUp gate injection")
+	}
+
+	// Check that the correct gate name is in the patch
+	gatesValue := patchValueForPath(resp, "/spec/schedulingGates")
+	if gatesValue == nil {
+		t.Fatal("expected patch for /spec/schedulingGates")
+	}
+	gatesJSON, _ := json.Marshal(gatesValue)
+	var gates []corev1.PodSchedulingGate
+	if err := json.Unmarshal(gatesJSON, &gates); err != nil {
+		t.Fatalf("unmarshal gates: %v", err)
+	}
+	if len(gates) != 1 {
+		t.Fatalf("expected 1 gate, got %d", len(gates))
+	}
+	if gates[0].Name != "kompakt.io/awaiting-scale-up" {
+		t.Fatalf("expected kompakt.io/awaiting-scale-up, got %s", gates[0].Name)
+	}
+}

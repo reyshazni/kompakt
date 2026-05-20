@@ -1,6 +1,6 @@
 # 003: WaitForScaleUp Rule
 
-Status: PLANNED
+Status: DONE
 
 ## Context
 

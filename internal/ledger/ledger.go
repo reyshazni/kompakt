@@ -119,14 +119,62 @@ func (l *NodeLedger) ReleaseReservation(nodeName string, demand map[string]int64
 
 // FindFit returns the name of the node with the smallest sufficient
 // unreserved capacity (BestFit). Considers both existing and in-flight nodes.
-func (l *NodeLedger) FindFit(demand map[string]int64) (string, error) {
+// isInflight indicates whether the match came from an in-flight node.
+// When existing and in-flight nodes have equal slack, existing is preferred.
+func (l *NodeLedger) FindFit(demand map[string]int64) (name string, isInflight bool, err error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	bestName := ""
+	bestSlack := int64(math.MaxInt64)
+	bestInflight := false
+
+	check := func(nodeName string, n *nodeEntry, inflight bool) {
+		fits := true
+		var totalSlack int64
+		for res, qty := range demand {
+			avail := n.available(res)
+			if avail < qty {
+				fits = false
+				break
+			}
+			totalSlack += avail - qty
+		}
+		if !fits {
+			return
+		}
+		// Prefer existing over inflight at equal slack
+		if totalSlack < bestSlack || (totalSlack == bestSlack && !inflight && bestInflight) {
+			bestName = nodeName
+			bestSlack = totalSlack
+			bestInflight = inflight
+		}
+	}
+
+	for n, e := range l.nodes {
+		check(n, e, false)
+	}
+	for n, e := range l.inflight {
+		check(n, e, true)
+	}
+
+	if bestName == "" {
+		return "", false, errNoFit
+	}
+	return bestName, bestInflight, nil
+}
+
+// FindFitExisting returns the name of the existing node with the smallest
+// sufficient unreserved capacity (BestFit). Only considers existing nodes,
+// not in-flight nodes.
+func (l *NodeLedger) FindFitExisting(demand map[string]int64) (string, error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
 	bestName := ""
 	bestSlack := int64(math.MaxInt64)
 
-	check := func(name string, n *nodeEntry) {
+	for name, n := range l.nodes {
 		fits := true
 		var totalSlack int64
 		for res, qty := range demand {
@@ -141,13 +189,6 @@ func (l *NodeLedger) FindFit(demand map[string]int64) (string, error) {
 			bestName = name
 			bestSlack = totalSlack
 		}
-	}
-
-	for name, n := range l.nodes {
-		check(name, n)
-	}
-	for name, n := range l.inflight {
-		check(name, n)
 	}
 
 	if bestName == "" {

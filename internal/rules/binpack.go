@@ -23,7 +23,8 @@ func (r *BinPackOnInflightCapacity) Name() string {
 	return "BinPackOnInflightCapacity"
 }
 
-// Evaluate checks if the pod can be placed on available capacity.
+// Evaluate checks if the pod can be placed on existing node capacity.
+// Only considers nodes that are already Ready, not in-flight nodes.
 func (r *BinPackOnInflightCapacity) Evaluate(
 	_ context.Context,
 	pod *corev1.Pod,
@@ -35,7 +36,7 @@ func (r *BinPackOnInflightCapacity) Evaluate(
 		return true, "", nil
 	}
 
-	nodeName, err := l.FindFit(demand)
+	nodeName, err := l.FindFitExisting(demand)
 	if err != nil {
 		return false, "", nil
 	}

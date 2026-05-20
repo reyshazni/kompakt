@@ -72,9 +72,26 @@ func TestBinPack_NoCapacity(t *testing.T) {
 	}
 }
 
-func TestBinPack_InflightCapacity(t *testing.T) {
+func TestBinPack_InflightCapacity_Ignored(t *testing.T) {
+	// BinPack should only consider existing nodes, not inflight.
 	l := ledger.New()
 	l.AddInflightNode("inflight-1", map[string]int64{"cpu": 4000})
+
+	rule := &BinPackOnInflightCapacity{}
+	release, _, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if release {
+		t.Fatal("expected release=false, BinPack should ignore inflight nodes")
+	}
+}
+
+func TestBinPack_IgnoresInflight_WhenExistingAlsoFits(t *testing.T) {
+	// Both existing and inflight can fit. BinPack should only use existing.
+	l := ledger.New()
+	l.AddNode("existing", map[string]int64{"cpu": 8000})
+	l.AddInflightNode("inflight", map[string]int64{"cpu": 2000})
 
 	rule := &BinPackOnInflightCapacity{}
 	release, nodeName, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
@@ -82,10 +99,10 @@ func TestBinPack_InflightCapacity(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !release {
-		t.Fatal("expected release=true with inflight capacity")
+		t.Fatal("expected release=true for existing node")
 	}
-	if nodeName != "inflight-1" {
-		t.Fatalf("expected inflight-1, got %s", nodeName)
+	if nodeName != "existing" {
+		t.Fatalf("expected existing node, got %s", nodeName)
 	}
 }
 

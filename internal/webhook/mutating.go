@@ -25,6 +25,7 @@ const (
 // gateNames maps rule plugin names to scheduling gate names.
 var gateNames = map[string]string{
 	"BinPackOnInflightCapacity": "kompakt.io/awaiting-bin-pack",
+	"WaitForScaleUp":            "kompakt.io/awaiting-scale-up",
 	"WaitForImagePrePull":       "kompakt.io/awaiting-image-prepull",
 	"WaitForMIGProfile":         "kompakt.io/awaiting-mig-reconfig",
 	"WaitForCoLocation":         "kompakt.io/awaiting-colocation",
