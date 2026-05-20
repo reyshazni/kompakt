@@ -11,9 +11,15 @@ Kompakt is a Kubernetes admission-time coordinator that prevents cluster autosca
 
 ## The problem
 
-When multiple unschedulable pods appear at the same time, the cluster autoscaler groups them independently and frequently provisions one node per pod, even when they could share. With topology spread constraints, pod affinity, or fractional-GPU annotations, the over-provisioning gets severe: **30-60% extra nodes is typical**, with extreme cases hitting 10x.
+The cluster autoscaler evaluates pending pods in scan cycles (every 10-30 seconds). Pods that arrive in different cycles are not batched together. When a node is being provisioned but not yet Ready, the autoscaler simulates whether pending pods will fit on it -- but this simulation only works for resources declared in the node template.
 
-This affects every major cloud running the upstream cluster autoscaler.
+In practice, this causes over-provisioning in two common scenarios:
+
+**Fractional GPU sharing**: You have 2 notebooks, each needing half a GPU. One node is enough. But the autoscaler's node template does not declare `gpu-mem` (only `gpu-core.percentage`), so it cannot simulate that the second notebook fits on the incoming node. It provisions a second GPU node. You pay double.
+
+**Burst deployments**: You deploy 3 services simultaneously, each with topology spread constraints. The autoscaler sees them in separate scan cycles and provisions nodes independently, often 1 node per service instead of packing them together.
+
+These are not bugs in the autoscaler. It makes the best decision it can with the information available at each scan cycle. The problem is that no one coordinates demand across cycles -- that is what Kompakt does.
 
 ## What Kompakt does
 
