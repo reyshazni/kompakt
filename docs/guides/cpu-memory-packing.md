@@ -11,7 +11,16 @@ You have multiple Deployments, StatefulSets, or other workloads that scale simul
 - Topology spread constraints across Deployments
 - Pod affinity rules between different workloads
 
+## Prerequisites
+
+- Managed Kubernetes cluster (GKE, EKS, AKS, ACK, etc.) running **Kubernetes >= 1.30**
+- Cluster autoscaler enabled (this is the default on most managed Kubernetes services)
+- At least one node pool configured with autoscaling
+- Kompakt installed ([Installation guide](../getting-started/installation.md))
+
 ## Which rules to use
+
+Kompakt has two rules for CPU/memory workloads. You can use one or both depending on your scenario.
 
 | Scenario | Rules | Why |
 |---|---|---|
@@ -21,7 +30,7 @@ You have multiple Deployments, StatefulSets, or other workloads that scale simul
 
 ### BinPack only
 
-Use when your cluster already has capacity and you want to minimize node waste. No scale-up coordination. Pods that don't fit stay gated until timeout.
+Use when your cluster already has running nodes with available capacity and you want to minimize node waste. No scale-up coordination. Pods that don't fit stay gated until timeout.
 
 ```yaml
 apiVersion: packer.kompakt.io/v1alpha1
@@ -46,7 +55,7 @@ spec:
 
 ### WaitForScaleUp only
 
-Use when you always scale from zero or near-zero and want to prevent redundant node provisioning. The first pod passes through to trigger the autoscaler, subsequent pods wait for the incoming node.
+Use when your node pool scales from zero or near-zero and you want to prevent redundant node provisioning. The first pod passes through to trigger the autoscaler, subsequent pods wait for the incoming node.
 
 ```yaml
 apiVersion: packer.kompakt.io/v1alpha1
@@ -74,7 +83,7 @@ spec:
   reservationTimeout: 3m
 ```
 
-`nodeGroupTemplates` tells Kompakt how much capacity the incoming node will have. Without it, Kompakt cannot match pods to in-flight nodes.
+`nodeGroupTemplates` tells Kompakt how much capacity the incoming node will have. Without it, Kompakt cannot match pods to in-flight nodes. See [Finding your nodeGroupTemplate values](#finding-your-nodegrouptemplate-values) for how to fill this in.
 
 ### Both rules together
 
@@ -113,7 +122,9 @@ Rules execute in order. BinPack runs first. If it finds a fit on an existing nod
 
 ### 1. Create the PackingProfile
 
-Pick the rule combination from above. Apply it:
+Pick the rule combination from above. Replace `pool-cpu-4xlarge` with your actual node pool name and fill in the allocatable values for your instance type (see [Finding your nodeGroupTemplate values](#finding-your-nodegrouptemplate-values)).
+
+Save it as `packingprofile.yaml` and apply:
 
 ```bash
 kubectl apply -f packingprofile.yaml
@@ -173,6 +184,36 @@ kubectl get nodes -w
 Without Kompakt, deploying `service-a` (3 replicas) and `service-b` (3 replicas) simultaneously with topology spread constraints on a full cluster would provision up to 6 nodes.
 
 With Kompakt, the same deployment provisions 3 nodes. The first pod triggers a scale-up, subsequent pods are held until capacity is confirmed, then released in coordinated batches that share nodes.
+
+## Finding your nodeGroupTemplate values
+
+You need two things: the node pool name (for `namePrefix`) and the instance type's resources (for `allocatable`).
+
+**Node pool name**: check the cluster autoscaler status ConfigMap:
+
+```bash
+kubectl get configmap cluster-autoscaler-status -n kube-system -o yaml
+```
+
+Look for lines like:
+
+```
+Name: pool-cpu-4xlarge
+Health: ready=2, cloudProviderTarget=4
+```
+
+Use `pool-cpu-4xlarge` as your `namePrefix`.
+
+**Allocatable resources**: check an existing node of the same instance type:
+
+```bash
+kubectl get node <node-name> -o jsonpath='{.status.allocatable}' | jq
+```
+
+Or check your cloud provider's console for the instance type's CPU and memory. Convert to millivalue: 16 vCPU = `16000`, 64 GiB memory = `64000000000` (in milli-bytes via `resource.Quantity.MilliValue()`).
+
+!!! note
+    If your cluster does not have any running nodes of that type yet, check your cloud provider's documentation for the instance type specs.
 
 ## Using different profiles for different tiers
 

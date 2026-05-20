@@ -1,35 +1,48 @@
 # GPU Packing
 
+This guide covers how to use Kompakt to coordinate fractional GPU workloads and prevent over-provisioning of GPU nodes.
+
 ## When you need this
 
-You run fractional GPU workloads and the cluster autoscaler provisions more GPU nodes than necessary during scale-ups. Common scenarios:
+Multiple GPU workloads arrive at the same time (or within the same autoscaler scan cycle), and the cluster autoscaler provisions a separate GPU node for each one -- even when they could share. GPU nodes are expensive; even one extra node is significant cost.
+
+Common scenarios:
 
 - Multiple inference Deployments sharing GPUs via time-slicing or cGPU
-- Burst of GPU workloads from KServe, Ray, or Kubeflow that trigger simultaneous node provisioning
-- GPU nodes are expensive and even one extra node is significant cost
+- Burst of GPU workloads from notebook platforms, KServe, Ray, or Kubeflow
+- Scale-from-zero GPU node pools where the autoscaler does not know incoming node capacity
 
-Kompakt understands GPU resource requests for bin-packing decisions without replacing device allocation. NVIDIA device plugin, HAMi, KAI, and other GPU sharing systems continue to handle actual device assignment.
+## Prerequisites
+
+- Managed Kubernetes cluster (GKE, EKS, AKS, ACK, etc.) running **Kubernetes >= 1.30**
+- Cluster autoscaler enabled with at least one GPU node pool configured for autoscaling
+- A GPU sharing system installed on your cluster (see [Supported GPU sharing systems](#supported-gpu-sharing-systems))
+- Kompakt installed ([Installation guide](../getting-started/installation.md))
+
+Kompakt does not install or manage GPU device plugins. It reads the resource requests and annotations that your GPU sharing system produces, and uses them for capacity decisions. The GPU sharing system must be installed and working before you configure Kompakt.
+
+## Supported GPU sharing systems
+
+| System | How pods request GPU | Kompakt demand source | Version |
+|---|---|---|---|
+| [NVIDIA device-plugin](https://github.com/NVIDIA/k8s-device-plugin) | `resources.requests: nvidia.com/gpu` | ResourceRequest | v0.1 |
+| [Alibaba cGPU](https://www.alibabacloud.com/help/en/ack/ack-managed-and-ack-dedicated/user-guide/install-and-use-the-shared-gpu-component) | Pod annotation `aliyun.com/gpu-mem` | Annotation | v0.1 |
+| [HAMi](https://github.com/Project-HAMi/HAMi) | Pod annotations | Annotation | v0.2 |
+| [KAI](https://github.com/AliyunContainerService/gpushare-scheduler-extender) | Pod annotations | Annotation | v0.2 |
 
 ## Which rules to use
 
 | Scenario | Rules | Why |
 |---|---|---|
-| GPU nodes already running, pack more pods onto them | `BinPackOnInflightCapacity` only | Fit pods onto existing GPU capacity |
+| GPU nodes already running, pack more pods onto them | `BinPackOnInflightCapacity` only | Fit pods onto existing GPU capacity, no scale-up involved |
 | Scale-from-zero GPU, prevent double provisioning | `WaitForScaleUp` only | See [Scale-from-zero GPU guide](scale-from-zero-gpu.md) |
-| Mixed: some GPU nodes exist, also expect scale-ups | Both rules together | Pack first, coordinate new nodes second |
+| Mixed: some GPU nodes exist, also expect scale-ups | Both rules together | Pack onto existing nodes first, coordinate new nodes second |
 
-For the common GPU notebook/inference scenario where you scale from zero, see the dedicated [Scale-from-zero GPU guide](scale-from-zero-gpu.md).
-
-## Supported GPU sharing systems
-
-| System | Demand source | Version |
-|---|---|---|
-| NVIDIA device-plugin (`nvidia.com/gpu`) | ResourceRequest | v0.1 |
-| Alibaba cGPU (`aliyun.com/gpu-mem`) | Annotation | v0.1 |
-| HAMi annotations | Annotation | v0.2 |
-| KAI annotations | Annotation | v0.2 |
+For the common GPU notebook/inference scenario where your GPU node pool scales from zero, see the dedicated [Scale-from-zero GPU guide](scale-from-zero-gpu.md).
 
 ## NVIDIA device-plugin (whole GPU or time-slicing)
+
+This section assumes you have the [NVIDIA device-plugin](https://github.com/NVIDIA/k8s-device-plugin) installed on your cluster. On managed Kubernetes, this is typically enabled by selecting a GPU node pool in your cloud provider's console.
 
 ### 1. Create the profile
 
@@ -60,18 +73,40 @@ spec:
   reservationTimeout: 5m
 ```
 
+Replace `pool-a100` with your GPU node pool name and update the `allocatable` values to match your instance type. See [Finding your nodeGroupTemplate values](#finding-your-nodegrouptemplate-values).
+
 ### 2. Label your GPU workloads
 
+Add the label to your Deployment, StatefulSet, Job, or any workload that creates pods:
+
 ```yaml
-labels:
-  packer.kompakt.io/packing-profile: nvidia-gpu
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference-server
+spec:
+  template:
+    metadata:
+      labels:
+        app: inference-server
+        packer.kompakt.io/packing-profile: nvidia-gpu
+    spec:
+      containers:
+        - name: model
+          image: my-model:latest
+          resources:
+            requests:
+              nvidia.com/gpu: 1
+              memory: 16Gi
 ```
 
 This works for both whole-GPU requests and NVIDIA time-slicing (where `nvidia.com/gpu` is replicated per partition).
 
 ## Alibaba cGPU
 
-Alibaba cGPU expresses GPU memory demand via pod annotations and node capacity via node labels. The cluster autoscaler does not understand these annotations, which makes over-provisioning especially severe.
+This section assumes you have Alibaba cGPU installed on your ACK cluster. cGPU is installed via the ACK console under "Manage System Components" or via the cGPU Helm chart. Once installed, it provides the `aliyun.com/gpu-mem` annotation for GPU memory sharing and adds `aliyun.accelerator/gpu-memory-mib` and `aliyun.accelerator/gpu-count` labels to GPU nodes.
+
+cGPU expresses GPU memory demand via pod annotations and node capacity via node labels. The cluster autoscaler does not understand these annotations, which makes over-provisioning especially severe -- this is the primary use case for Kompakt.
 
 ### 1. Create the profile
 
@@ -106,18 +141,40 @@ spec:
   reservationTimeout: 5m
 ```
 
-The `requiredLabels` field in `readinessSignal` ensures that the controller waits for the GPU device plugin labels to appear before considering the node ready. GPU nodes often reach `Ready=True` before the device plugin has registered its labels.
+Replace `pool-l20` with your GPU node pool name and `49152` with the total GPU memory in MiB for your GPU type (e.g., L20 = 48 GiB = 49152 MiB). See [Finding your nodeGroupTemplate values](#finding-your-nodegrouptemplate-values).
+
+The `requiredLabels` field ensures that Kompakt waits for the cGPU device plugin labels to appear on the node before considering it ready. GPU nodes often reach `Ready=True` before the device plugin has registered its labels.
 
 ### 2. Label your cGPU workloads
 
 ```yaml
-labels:
-  packer.kompakt.io/packing-profile: alibaba-cgpu
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notebook
+spec:
+  template:
+    metadata:
+      labels:
+        app: notebook
+        packer.kompakt.io/packing-profile: alibaba-cgpu
+      annotations:
+        aliyun.com/gpu-mem: "24576"
+    spec:
+      containers:
+        - name: notebook
+          image: jupyter/tensorflow-notebook:latest
+          resources:
+            requests:
+              cpu: "2"
+              memory: 8Gi
 ```
+
+The `aliyun.com/gpu-mem` annotation is set by your application or platform (e.g., JupyterHub, KubeFlow). Kompakt reads it but does not create or modify it.
 
 ## BinPack only (existing GPU nodes)
 
-If your GPU nodes are always running and you just want to pack more pods onto them without scale-up coordination:
+If your GPU nodes are always running (no autoscaling) and you just want to pack more pods onto available GPU capacity:
 
 ```yaml
 apiVersion: packer.kompakt.io/v1alpha1
@@ -140,7 +197,44 @@ spec:
   reservationTimeout: 1m
 ```
 
-No `nodeGroupTemplates` needed since there are no in-flight nodes to track.
+No `nodeGroupTemplates` needed since there are no in-flight nodes to track. No `WaitForScaleUp` rule needed since no scale-up is expected.
+
+## Finding your nodeGroupTemplate values
+
+You need two things: the node pool name (for `namePrefix`) and the GPU resources (for `allocatable`).
+
+**Node pool name**: check the cluster autoscaler status ConfigMap:
+
+```bash
+kubectl get configmap cluster-autoscaler-status -n kube-system -o yaml
+```
+
+Look for lines like:
+
+```
+Name: pool-l20
+Health: ready=0, cloudProviderTarget=2
+```
+
+Use `pool-l20` as your `namePrefix`.
+
+**Allocatable resources**: if you have an existing GPU node of the same type:
+
+```bash
+# For NVIDIA device-plugin
+kubectl get node <gpu-node-name> -o jsonpath='{.status.allocatable.nvidia\.com/gpu}'
+
+# For cGPU, check the node label
+kubectl get node <gpu-node-name> -o jsonpath='{.metadata.labels.aliyun\.accelerator/gpu-memory-mib}'
+```
+
+If no GPU nodes exist yet, check your cloud provider's documentation:
+
+- **NVIDIA L20**: 48 GiB VRAM = 49152 MiB
+- **NVIDIA A100 40GB**: 40960 MiB
+- **NVIDIA A100 80GB**: 81920 MiB
+- **NVIDIA V100**: 16384 MiB
+- **NVIDIA T4**: 15360 MiB
 
 ## GPU timeout considerations
 
@@ -162,12 +256,13 @@ labels:
 
 ## What Kompakt does NOT do with GPUs
 
+- Does not install GPU drivers or device plugins
 - Does not allocate GPU devices to containers
 - Does not manage MIG profiles (planned for v0.3)
 - Does not replace NVIDIA device plugin, HAMi, or KAI
 - Does not modify GPU-related annotations on pods
 
-Kompakt only uses GPU information for node-level capacity decisions. Actual device allocation remains the responsibility of the GPU sharing system you already have installed.
+Kompakt only reads GPU resource information for node-level capacity decisions. Actual GPU device allocation is handled entirely by your GPU sharing system.
 
 ## Next steps
 
