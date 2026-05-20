@@ -6,7 +6,7 @@ Kompakt needs to know about nodes that are being provisioned but not yet Ready. 
 
 Kompakt does not care which cloud your cluster runs on. It cares which autoscaler is running and how that autoscaler signals scale-up events. All data comes from the Kubernetes API. Kompakt never calls cloud APIs and never requires cloud credentials.
 
-Detection works in two layers that run in parallel:
+Detection works in two layers with a priority chain:
 
 **Layer 1: Autoscaler-aware** detects scale-up before the Node object exists in Kubernetes. This covers the critical window between the autoscaler's decision and node registration.
 
@@ -16,24 +16,44 @@ Detection works in two layers that run in parallel:
 | GOATScalerDetector | ACK GOATScaler | `ProvisionNode` pod events | Alibaba ACK |
 | KarpenterDetector (planned) | Karpenter | `NodeClaim` CRD resources | EKS, AKS (NAP) |
 
-**Layer 2: Node-based** detects nodes that exist in Kubernetes but have never been Ready. This covers the secondary window while the node initializes (GPU driver, device plugin, CNI). Typically 2-5 minutes for GPU nodes. Works on every cloud and every autoscaler, including custom autoscalers that Kompakt does not know about.
+**Layer 2: Node-based (fallback)** detects nodes that exist in Kubernetes but have never been Ready. This covers the secondary window while the node initializes (GPU driver, device plugin, CNI). Typically 2-5 minutes for GPU nodes. Works on every cloud and every autoscaler, including custom autoscalers that Kompakt does not know about.
 
 | Detector | Signal | Clouds |
 |---|---|---|
 | NotReadyNodeDetector | Nodes where Ready!=True and never been Ready | All |
 
-Both layers run on every reconcile. Results are deduplicated by node name. Layer 1 provides earlier and richer data. Layer 2 serves as a universal safety net.
+Only one detector is active at a time. Kompakt tries each Layer 1 detector in order. The first one that finds nodes wins. Layer 2 only runs if all Layer 1 detectors return empty.
 
 One autoscaler can serve multiple clouds (CA runs on EKS, GKE, and AKS). One cloud can have multiple autoscaler options (ACK supports both GOATScaler and upstream CA).
 
 ## Auto-discovery
 
-All detectors run in parallel on every reconcile cycle. Each detector probes for its signal source:
+Kompakt tries each detector in priority order on every reconcile cycle. Each detector probes for its signal source:
 
-- Signal found: parse and return in-flight nodes
-- Signal not found: return empty (not an error)
+- Signal found: use this detector, skip the rest
+- Signal not found: try the next detector
 
-No configuration needed. On ACK, the CA detector finds no ConfigMap and returns nothing; the GOATScaler detector finds `ProvisionNode` events and returns in-flight nodes. On EKS with CA, the CA detector finds the ConfigMap; the GOATScaler detector finds no events. Both work automatically.
+No configuration needed. On ACK, the CA detector finds no ConfigMap and returns nothing, then the GOATScaler detector finds `ProvisionNode` events and returns in-flight nodes. On EKS with CA, the CA detector finds the ConfigMap and wins immediately.
+
+You can see which detector is active via the PackingProfile status:
+
+```bash
+kubectl get packingprofile my-profile -o jsonpath='{.status.activeDetectors}'
+# ["goatscaler"]
+```
+
+Or in `kubectl describe`:
+
+```yaml
+status:
+  activeDetectors:
+    - goatscaler
+  inflightNodes: 2
+  conditions:
+    - type: InflightDetectionActive
+      status: "True"
+      message: "2 inflight node(s) detected by goatscaler"
+```
 
 ## Cluster Autoscaler detector
 
