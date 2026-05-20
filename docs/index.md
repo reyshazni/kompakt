@@ -13,13 +13,15 @@ Kompakt is a Kubernetes admission-time coordinator that prevents cluster autosca
 
 The cluster autoscaler evaluates pending pods in scan cycles (every 10-30 seconds). Pods that arrive in different cycles are not batched together. When a node is being provisioned but not yet Ready, the autoscaler simulates whether pending pods will fit on it -- but this simulation only works for resources declared in the node template.
 
-In practice, this causes over-provisioning in two common scenarios:
+This causes over-provisioning whenever demand arrives faster than the autoscaler can batch it. Some examples:
 
 **Fractional GPU sharing**: You have 2 notebooks, each needing half a GPU. One node is enough. But the autoscaler's node template does not declare `gpu-mem` (only `gpu-core.percentage`), so it cannot simulate that the second notebook fits on the incoming node. It provisions a second GPU node. You pay double.
 
 **Burst deployments**: You deploy 3 services simultaneously, each with topology spread constraints. The autoscaler sees them in separate scan cycles and provisions nodes independently, often 1 node per service instead of packing them together.
 
-These are not bugs in the autoscaler. It makes the best decision it can with the information available at each scan cycle. The problem is that no one coordinates demand across cycles -- that is what Kompakt does.
+**Scale-from-zero**: A node pool scales to zero when idle. Two requests arrive within seconds. The first triggers a node, the second cannot see it yet and triggers another.
+
+These are not bugs in the autoscaler. It makes the best decision it can with the information available at each scan cycle. The problem is that no one coordinates demand across cycles. Kompakt fills that gap.
 
 ## What Kompakt does
 
