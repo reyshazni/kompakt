@@ -16,9 +16,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	v1alpha1 "github.com/reyshazni/kompakt/api/v1alpha1"
+	"github.com/reyshazni/kompakt/internal/inflight"
 	"github.com/reyshazni/kompakt/internal/ledger"
 	_ "github.com/reyshazni/kompakt/internal/rules" // register BinPackOnInflightCapacity
 )
+
+// fakeDetector returns a fixed list of inflight nodes.
+type fakeDetector struct {
+	nodes []inflight.InflightNode
+}
+
+func (d *fakeDetector) Name() string { return "fake" }
+func (d *fakeDetector) Detect(_ context.Context, _ client.Reader) ([]inflight.InflightNode, error) {
+	return d.nodes, nil
+}
 
 func testScheme() *runtime.Scheme {
 	s := runtime.NewScheme()
@@ -523,5 +534,84 @@ func TestReconcile_UnknownRuleName_Skipped(t *testing.T) {
 	}
 	if hasKompaktGates(updated) {
 		t.Fatal("expected gates released (unknown rule should be skipped)")
+	}
+}
+
+func TestReconcile_InflightNodeEnrichedFromTemplate(t *testing.T) {
+	// Detector reports a pending node from "pool-gpu" with empty allocatable.
+	// Profile has a NodeGroupTemplate matching "pool-gpu" with 4000m CPU.
+	// The controller should enrich the inflight node, and the pod (1000m) should fit.
+	pod := gatedPod("gpu-pod", 1000)
+	profile := testProfile()
+	profile.Spec.CapacitySource.NodeGroupTemplates = []v1alpha1.NodeGroupTemplate{
+		{
+			NamePrefix:  "pool-gpu",
+			Allocatable: map[string]int64{"cpu": 4000},
+		},
+	}
+
+	detector := &fakeDetector{
+		nodes: []inflight.InflightNode{
+			{Name: "pool-gpu-pending-0", Allocatable: map[string]int64{}},
+		},
+	}
+
+	r, fc := setupReconciler(pod, profile)
+	r.Detectors = []inflight.Detector{detector}
+
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "gpu-pod", Namespace: "default"}}
+	result, err := r.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.RequeueAfter != 0 {
+		t.Fatalf("expected no requeue (pod should fit on enriched inflight), got %v", result.RequeueAfter)
+	}
+
+	updated := &corev1.Pod{}
+	if err := fc.Get(context.Background(), req.NamespacedName, updated); err != nil {
+		t.Fatalf("failed to get pod: %v", err)
+	}
+	if hasKompaktGates(updated) {
+		t.Fatal("expected gates released, pod should fit on enriched inflight node")
+	}
+}
+
+func TestReconcile_InflightNodeNoMatchingTemplate(t *testing.T) {
+	// Detector reports a pending node but profile has no matching template.
+	// Allocatable stays empty, pod should NOT fit.
+	pod := gatedPod("no-match-pod", 1000)
+	profile := testProfile()
+	profile.Spec.CapacitySource.NodeGroupTemplates = []v1alpha1.NodeGroupTemplate{
+		{
+			NamePrefix:  "pool-cpu",
+			Allocatable: map[string]int64{"cpu": 4000},
+		},
+	}
+
+	detector := &fakeDetector{
+		nodes: []inflight.InflightNode{
+			{Name: "pool-gpu-pending-0", Allocatable: map[string]int64{}},
+		},
+	}
+
+	r, fc := setupReconciler(pod, profile)
+	r.Detectors = []inflight.Detector{detector}
+
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "no-match-pod", Namespace: "default"}}
+	result, err := r.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.RequeueAfter != time.Second {
+		t.Fatalf("expected requeue (no matching template), got %v", result.RequeueAfter)
+	}
+
+	updated := &corev1.Pod{}
+	if err := fc.Get(context.Background(), req.NamespacedName, updated); err != nil {
+		t.Fatalf("failed to get pod: %v", err)
+	}
+	if !hasKompaktGates(updated) {
+		t.Fatal("expected gates to stay, pod should NOT fit on inflight with empty allocatable")
 	}
 }

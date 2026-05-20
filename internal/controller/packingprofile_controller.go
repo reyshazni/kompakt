@@ -84,7 +84,7 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}()
 
 	// 5. Sync ledger from cluster state
-	if err := r.syncLedger(ctx, logger); err != nil {
+	if err := r.syncLedger(ctx, logger, profile); err != nil {
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
@@ -236,7 +236,7 @@ func (r *PackingProfileReconciler) releaseGatesWithAffinity(ctx context.Context,
 	return r.Patch(ctx, pod, patch)
 }
 
-func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.Logger) error {
+func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.Logger, profile *v1alpha1.PackingProfile) error {
 	// Sync existing nodes
 	nodeList := &corev1.NodeList{}
 	if err := r.List(ctx, nodeList); err != nil {
@@ -294,11 +294,31 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 			continue
 		}
 		for _, n := range nodes {
-			r.Ledger.AddInflightNode(n.Name, n.Allocatable)
+			alloc := n.Allocatable
+			if len(alloc) == 0 {
+				alloc = matchNodeGroupTemplate(n.Name, profile.Spec.CapacitySource.NodeGroupTemplates)
+			}
+			r.Ledger.AddInflightNode(n.Name, alloc)
 		}
 		kompaktmetrics.LedgerInflightNodes.WithLabelValues(d.Name()).Set(float64(len(nodes)))
 	}
 
+	return nil
+}
+
+// matchNodeGroupTemplate finds the first NodeGroupTemplate whose NamePrefix
+// matches the inflight node name and returns a copy of its allocatable map.
+// Returns nil if no template matches.
+func matchNodeGroupTemplate(nodeName string, templates []v1alpha1.NodeGroupTemplate) map[string]int64 {
+	for _, t := range templates {
+		if strings.HasPrefix(nodeName, t.NamePrefix) {
+			alloc := make(map[string]int64, len(t.Allocatable))
+			for k, v := range t.Allocatable {
+				alloc[k] = v
+			}
+			return alloc
+		}
+	}
 	return nil
 }
 

@@ -67,6 +67,34 @@ spec:
                       Label is the node label key holding the total capacity value.
                       Used when Type is NodeLabel.
                     type: string
+                  nodeGroupTemplates:
+                    description: |-
+                      NodeGroupTemplates maps node group name prefixes to expected allocatable
+                      resources for in-flight nodes detected from that group. The controller
+                      matches detected inflight node names against these prefixes and populates
+                      their allocatable accordingly.
+                    items:
+                      description: |-
+                        NodeGroupTemplate declares expected allocatable resources for nodes in a
+                        specific node group. Used to populate capacity on in-flight nodes whose
+                        actual allocatable is unknown until they arrive.
+                      properties:
+                        allocatable:
+                          additionalProperties:
+                            format: int64
+                            type: integer
+                          description: Allocatable is the expected allocatable resources
+                            in millivalue.
+                          type: object
+                        namePrefix:
+                          description: NamePrefix is the node group name prefix to
+                            match against inflight node names.
+                          type: string
+                      required:
+                      - allocatable
+                      - namePrefix
+                      type: object
+                    type: array
                   perDeviceCount:
                     description: |-
                       PerDeviceCount specifies a node label whose value indicates the number

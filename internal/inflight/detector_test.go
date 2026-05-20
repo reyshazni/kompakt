@@ -2,6 +2,7 @@ package inflight
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -77,7 +78,7 @@ func TestDetect_EmptyStatus(t *testing.T) {
 	}
 }
 
-func TestDetect_PendingNodes_AllocatableIsEmpty(t *testing.T) {
+func TestDetect_PendingNodes_NameContainsGroup(t *testing.T) {
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-autoscaler-status",
@@ -98,12 +99,11 @@ func TestDetect_PendingNodes_AllocatableIsEmpty(t *testing.T) {
 	if len(nodes) != 2 {
 		t.Fatalf("expected 2 inflight nodes, got %d", len(nodes))
 	}
-	// BUG: Allocatable is empty, making these nodes useless for bin-packing.
-	// The ledger's FindFit checks available(res) which returns 0 for all
-	// resources when allocatable is empty. No pod will ever fit on these nodes.
-	for i, n := range nodes {
-		if len(n.Allocatable) != 0 {
-			t.Fatalf("node %d: expected empty allocatable (known limitation), got %v", i, n.Allocatable)
+	// Node names must contain the group name so the controller can match
+	// them against NodeGroupTemplates by prefix.
+	for _, n := range nodes {
+		if !strings.HasPrefix(n.Name, "pool-gpu") {
+			t.Fatalf("expected node name to start with group name 'pool-gpu', got %s", n.Name)
 		}
 	}
 }

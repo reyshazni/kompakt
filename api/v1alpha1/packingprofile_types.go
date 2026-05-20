@@ -67,6 +67,23 @@ type CapacitySource struct {
 	// PerDeviceCount specifies a node label whose value indicates the number
 	// of devices on the node. Used for fractional GPU calculations.
 	PerDeviceCount *LabelRef `json:"perDeviceCount,omitempty"`
+
+	// NodeGroupTemplates maps node group name prefixes to expected allocatable
+	// resources for in-flight nodes detected from that group. The controller
+	// matches detected inflight node names against these prefixes and populates
+	// their allocatable accordingly.
+	NodeGroupTemplates []NodeGroupTemplate `json:"nodeGroupTemplates,omitempty"`
+}
+
+// NodeGroupTemplate declares expected allocatable resources for nodes in a
+// specific node group. Used to populate capacity on in-flight nodes whose
+// actual allocatable is unknown until they arrive.
+type NodeGroupTemplate struct {
+	// NamePrefix is the node group name prefix to match against inflight node names.
+	NamePrefix string `json:"namePrefix"`
+
+	// Allocatable is the expected allocatable resources in millivalue.
+	Allocatable map[string]int64 `json:"allocatable"`
 }
 
 // LabelRef is a reference to a node label.
