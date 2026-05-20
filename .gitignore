@@ -43,6 +43,9 @@ charts/kompakt/charts/
 tmp/
 temp/
 
+# Docs
+site/
+
 # Python
 .venv/
 __pycache__/
