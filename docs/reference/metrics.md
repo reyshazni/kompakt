@@ -1,37 +1,66 @@
 # Prometheus Metrics
 
-All metrics use the `kompakt_` prefix.
+All metrics use the `kompakt_` prefix and are served on port `8080` at `/metrics`.
+
+In addition to the custom metrics below, Kompakt exposes standard controller-runtime
+metrics (`controller_runtime_reconcile_total`, `controller_runtime_webhook_latency_seconds`,
+`workqueue_*`, etc.) which are not listed here.
 
 ## Webhook
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
-| `kompakt_webhook_duration_seconds` | Histogram | | Time to process a webhook request |
-| `kompakt_webhook_errors_total` | Counter | `reason` | Webhook errors. Reasons: `profile_not_found`, `internal_error` |
-| `kompakt_gates_injected_total` | Counter | `profile`, `namespace` | Scheduling gates injected |
+| `kompakt_webhook_requests_total` | Counter | `operation` | Webhook admission decisions. Operations: `gate`, `reject`, `passthrough` |
+| `kompakt_webhook_request_duration_seconds` | Histogram | `operation` | Time to process a webhook request. Buckets tuned for p99 < 50ms target |
 
 ## Controller
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
-| `kompakt_gates_released_total` | Counter | `profile`, `namespace`, `reason` | Gates released. Reasons: `capacity_available`, `timeout`, `priority_override`, `exclude` |
-| `kompakt_gate_duration_seconds` | Histogram | `profile` | Time between gate injection and release |
-| `kompakt_reservations_active` | Gauge | `profile` | Currently active capacity reservations |
-| `kompakt_reservations_failed_total` | Counter | `profile`, `reason` | Reservations that could not be fulfilled. Reasons: `node_disappeared`, `capacity_exhausted`, `timeout` |
+| `kompakt_gated_pods` | Gauge | `namespace`, `profile` | Current number of pods held with scheduling gates |
+| `kompakt_gate_hold_duration_seconds` | Histogram | `profile`, `reason` | Time between gate injection and release |
+| `kompakt_gate_releases_total` | Counter | `profile`, `reason` | Gates released. Reasons: `capacity`, `timeout`, `priority`, `profile_not_found` |
 
 ## Ledger
 
 | Metric | Type | Labels | Description |
 |---|---|---|---|
-| `kompakt_inflight_nodes_total` | Gauge | `adapter` | In-flight nodes detected. Adapters: `cluster_autoscaler`, `karpenter`, `ack_goatscaler`, `gke_nap` |
-| `kompakt_nodes_avoided_total` | Counter | | Cumulative nodes avoided through coordination. This is the headline ROI metric. |
+| `kompakt_ledger_nodes` | Gauge | | Existing nodes tracked by the ledger |
+| `kompakt_ledger_inflight_nodes` | Gauge | `source` | In-flight nodes by detection source: `cluster-autoscaler`, `karpenter` |
+| `kompakt_ledger_allocatable_millicores` | Gauge | | Total allocatable CPU across tracked nodes (millicores) |
+| `kompakt_ledger_allocatable_memory_bytes` | Gauge | | Total allocatable memory across tracked nodes (bytes) |
 
-## Key metrics to monitor
+## Rule Engine
 
-**`kompakt_nodes_avoided_total`**: The primary value metric. If this is not increasing during scale-up events, Kompakt is not providing value. Check that workloads are labeled and the controller is running.
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `kompakt_rule_evaluations_total` | Counter | `rule`, `result` | Rule evaluations. Results: `release`, `hold`, `error` |
+| `kompakt_rule_evaluation_duration_seconds` | Histogram | `rule` | Time per rule evaluation |
 
-**`kompakt_gate_duration_seconds`**: If p99 consistently hits your `reservationTimeout`, either the timeout is too low or capacity is genuinely unavailable. Check `kompakt_inflight_nodes_total` to verify in-flight detection is working.
+## Label Cardinality
 
-**`kompakt_webhook_duration_seconds`**: Should stay under 50ms p99. If it exceeds 100ms, investigate webhook pod resources.
+All labels are bounded:
 
-**`kompakt_webhook_errors_total{reason="profile_not_found"}`**: Non-zero means pods are referencing non-existent profiles. These pods are being rejected. Fix the label or create the missing profile.
+- `operation`: 3 values (gate, reject, passthrough)
+- `reason`: 4 values (capacity, timeout, priority, profile_not_found)
+- `profile`: bounded by PackingProfile count
+- `namespace`: bounded by cluster namespace count
+- `source`: bounded by detector implementations
+- `rule`: bounded by registered rule plugins
+- `result`: 3 values (release, hold, error)
+
+Pod name, node name, and UID are never used as labels.
+
+## Key Metrics to Monitor
+
+**`kompakt_gated_pods`**: If this grows unboundedly, pods are stuck. Alert if it exceeds
+a threshold for your cluster size.
+
+**`kompakt_gate_hold_duration_seconds`**: If p99 consistently hits your `reservationTimeout`,
+either the timeout is too low or capacity is genuinely unavailable. Check
+`kompakt_ledger_inflight_nodes` to verify in-flight detection is working.
+
+**`kompakt_webhook_request_duration_seconds`**: Should stay under 50ms p99.
+
+**`kompakt_gate_releases_total{reason="timeout"}`**: Non-zero means the system is failing
+to find capacity within the reservation window.

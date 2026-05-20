@@ -4,40 +4,78 @@
 
 You want to monitor Kompakt's behavior, measure cost savings, set up alerts for anomalies, or debug why pods are gated longer than expected. Common scenarios:
 
-- Measuring ROI: how many nodes did Kompakt save?
 - Debugging: why is a pod stuck in `SchedulingGated`?
 - Capacity planning: how often are reservations timing out?
 - SLA monitoring: is the webhook adding latency to pod creation?
 
-## Prometheus metrics
+## Structured Logging
 
-### Webhook metrics
+Kompakt uses structured JSON logging via `logr` + zap (controller-runtime). Logs are
+designed around the principle **log events, not states**: each pod produces exactly 2 log
+lines at default verbosity, regardless of how long it stays gated.
 
-| Metric | Type | Labels | Description |
-|---|---|---|---|
-| `kompakt_webhook_duration_seconds` | Histogram | | Webhook request latency |
-| `kompakt_webhook_errors_total` | Counter | `reason` | Webhook errors by reason |
-| `kompakt_gates_injected_total` | Counter | `profile`, `namespace` | Gates injected by profile |
+### Trace Correlation
 
-### Controller metrics
+Every gated pod receives a `kompakt.io/trace-id` annotation (8-character UUID) set by the
+webhook at admission time. This trace ID appears in every log line for that pod, across
+both webhook and controller:
 
-| Metric | Type | Labels | Description |
-|---|---|---|---|
-| `kompakt_gates_released_total` | Counter | `profile`, `namespace`, `reason` | Gates released by profile and reason |
-| `kompakt_gate_duration_seconds` | Histogram | `profile` | Time a pod spent gated |
-| `kompakt_reservations_active` | Gauge | `profile` | Currently active capacity reservations |
-| `kompakt_reservations_failed_total` | Counter | `profile`, `reason` | Failed reservations by reason |
+```
+# Webhook log (pod creation)
+{"level":"info","msg":"Pod gated","pod":"my-pod","namespace":"default","profile":"cpu-packing","traceID":"a1b2c3d4","gates":1}
 
-### Ledger metrics
+# Controller log (gate release, could be minutes later)
+{"level":"info","msg":"Gate released","traceID":"a1b2c3d4","profile":"cpu-packing","podUID":"...","reason":"capacity","node":"node-3"}
+```
 
-| Metric | Type | Labels | Description |
-|---|---|---|---|
-| `kompakt_inflight_nodes_total` | Gauge | `adapter` | In-flight nodes detected by adapter |
-| `kompakt_nodes_avoided_total` | Counter | | Nodes avoided through coordination (headline ROI metric) |
+To trace a pod's full lifecycle:
 
-## Scraping
+```bash
+# From logs
+kubectl logs -l app.kubernetes.io/name=kompakt -n kompakt-system | grep a1b2c3d4
 
-Kompakt exposes metrics on port `8080` at `/metrics`. Add a `ServiceMonitor` if you use the Prometheus Operator:
+# From the pod itself
+kubectl get pod my-pod -o jsonpath='{.metadata.annotations.kompakt\.io/trace-id}'
+```
+
+### Log Fields
+
+| Field | Description | Present in |
+|---|---|---|
+| `traceID` | 8-char UUID from `kompakt.io/trace-id` annotation | Webhook + Controller |
+| `profile` | PackingProfile name from pod label | Webhook + Controller |
+| `podUID` | Pod UID for unambiguous identification | Controller |
+| `namespace` | Pod namespace | Both |
+| `name` | Pod name | Both |
+| `reconcileID` | Auto-injected by controller-runtime, unique per reconcile | Controller |
+| `reason` | Gate release reason: `capacity`, `timeout`, `priority`, `profile_not_found` | Controller |
+| `node` | Target node for affinity (on release) | Controller |
+| `operation` | Webhook decision: `gate`, `reject`, `passthrough` | Webhook |
+| `gates` | Number of scheduling gates injected | Webhook |
+
+### Log Verbosity
+
+Adjust with the `--zap-log-level` flag on the manager binary:
+
+| Flag | Level | What you see |
+|---|---|---|
+| `--zap-log-level=0` | Info (default) | Gate injected, gate released, errors |
+| `--zap-log-level=1` | V(1) | + inflight detection failures, unknown rule names |
+| `--zap-log-level=3` | V(3) | + rule evaluation details, ledger sync stats |
+| `--zap-log-level=4` | V(4) | + bin-packing algorithm steps (very verbose) |
+
+At default verbosity, a pod's lifecycle produces exactly 2 log lines (webhook gate +
+controller release). Per-reconcile-cycle data (rule holds, ledger state) is captured in
+metrics, not logs, to avoid noise from the 1-second requeue loop.
+
+## Prometheus Metrics
+
+Kompakt exposes custom metrics on port `8080` at `/metrics`. See the
+[metrics reference](../reference/metrics.md) for the full list.
+
+### Scraping
+
+Add a `ServiceMonitor` if you use the Prometheus Operator:
 
 ```yaml
 apiVersion: monitoring.coreos.com/v1
@@ -68,42 +106,6 @@ Or add a scrape config:
       action: keep
 ```
 
-## Grafana dashboard
-
-A reference Grafana dashboard is available at `examples/grafana/kompakt-dashboard.json`. Import it into your Grafana instance.
-
-Key panels:
-
-- **Nodes avoided**: the headline ROI metric. Shows cumulative nodes saved through coordination.
-- **Gate duration**: p50/p95/p99 time pods spend gated, by profile. If this is consistently hitting your reservation timeout, your timeout may be too low.
-- **Active gates**: current number of gated pods per profile.
-- **Webhook latency**: p99 should stay under 50ms. If it spikes, the webhook may be under-resourced.
-- **Inflight nodes**: number of nodes detected by each adapter. If this stays at 0, check that the in-flight detection adapter is working.
-
-## Structured logging
-
-Kompakt uses structured JSON logging via `logr` (controller-runtime). Key log fields:
-
-- `profile`: the PackingProfile name
-- `pod`: the gated pod name
-- `namespace`: the pod namespace
-- `gate`: the gate name
-- `node`: the target node (when releasing a gate)
-- `reason`: why a gate was released or a reservation failed
-
-Adjust log verbosity with the `--zap-log-level` flag:
-
-```bash
-# Default (info)
---zap-log-level=0
-
-# Debug (verbose reconcile logging)
---zap-log-level=1
-
-# Trace (every ledger update)
---zap-log-level=2
-```
-
 ## Alerts
 
 Recommended alert rules:
@@ -112,23 +114,29 @@ Recommended alert rules:
 groups:
   - name: kompakt
     rules:
+      - alert: KompaktGatedPodsGrowing
+        expr: kompakt_gated_pods > 100
+        for: 10m
+        annotations:
+          summary: Large number of pods stuck in gated state
+
       - alert: KompaktWebhookHighLatency
-        expr: histogram_quantile(0.99, rate(kompakt_webhook_duration_seconds_bucket[5m])) > 0.1
+        expr: histogram_quantile(0.99, rate(kompakt_webhook_request_duration_seconds_bucket[5m])) > 0.05
         for: 5m
         annotations:
-          summary: Kompakt webhook p99 latency exceeds 100ms
+          summary: Kompakt webhook p99 latency exceeds 50ms
 
-      - alert: KompaktGateTimeout
-        expr: rate(kompakt_gates_released_total{reason="timeout"}[5m]) > 0
+      - alert: KompaktGateTimeouts
+        expr: rate(kompakt_gate_releases_total{reason="timeout"}[5m]) > 0
         for: 10m
         annotations:
           summary: Pods are hitting reservation timeout consistently
 
-      - alert: KompaktWebhookErrors
-        expr: rate(kompakt_webhook_errors_total[5m]) > 0.1
+      - alert: KompaktGateHoldDurationHigh
+        expr: histogram_quantile(0.99, rate(kompakt_gate_hold_duration_seconds_bucket[5m])) > 120
         for: 5m
         annotations:
-          summary: Kompakt webhook is returning errors
+          summary: Gate hold duration p99 exceeds 2 minutes
 ```
 
 ## Next steps
