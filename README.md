@@ -14,7 +14,9 @@ Kompakt does **not**:
 
 ## The Problem
 
-When multiple unschedulable pods appear at the same time, the cluster autoscaler groups them independently and frequently provisions one node per pod, even when they could share. With topology spread constraints, pod affinity, or fractional-GPU annotations, the over-provisioning gets severe: **30-60% extra nodes is typical**, with extreme cases hitting 10x.
+The cluster autoscaler evaluates pending pods in scan cycles (every 10-30s). Pods that arrive in different cycles are not batched together. When a node is provisioning, the autoscaler simulates whether pending pods will fit -- but only for resources declared in the node template.
+
+This causes over-provisioning: 2 half-GPU notebooks trigger 2 GPU nodes when 1 was enough (the node template does not declare `gpu-mem`). 3 services deployed simultaneously get 3 nodes instead of sharing. These are not autoscaler bugs -- no one coordinates demand across scan cycles.
 
 ## How It Works
 
