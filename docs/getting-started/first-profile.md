@@ -27,6 +27,7 @@ spec:
 
   rules:
     - name: BinPackOnInflightCapacity
+    - name: WaitForScaleUp
 
   reservationTimeout: 3m
 ```

@@ -69,6 +69,7 @@ nav:
   - Guides:
     - CPU/Memory Packing: guides/cpu-memory-packing.md
     - GPU Packing: guides/gpu-packing.md
+    - Scale-from-zero GPU: guides/scale-from-zero-gpu.md
     - Multi-cloud Setup: guides/multi-cloud.md
     - Observability: guides/observability.md
     - Troubleshooting: guides/troubleshooting.md

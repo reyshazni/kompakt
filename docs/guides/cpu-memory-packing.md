@@ -1,6 +1,6 @@
 # CPU/Memory Packing
 
-This guide covers how to use Kompakt to coordinate CPU and memory workloads during scale-up events.
+This guide covers how to use Kompakt to coordinate CPU and memory workloads.
 
 ## When you need this
 
@@ -11,15 +11,23 @@ You have multiple Deployments, StatefulSets, or other workloads that scale simul
 - Topology spread constraints across Deployments
 - Pod affinity rules between different workloads
 
-## Setup
+## Which rules to use
 
-### 1. Create the PackingProfile
+| Scenario | Rules | Why |
+|---|---|---|
+| Cluster has spare capacity, pods just need packing | `BinPackOnInflightCapacity` only | No scale-up involved, just fit pods onto existing nodes |
+| Scale-up expected, want to prevent over-provisioning | `WaitForScaleUp` only | Let first pod trigger scale-up, hold the rest until node arrives |
+| Both: pack onto existing, coordinate during scale-up | Both rules together | Most common setup for mixed clusters |
+
+### BinPack only
+
+Use when your cluster already has capacity and you want to minimize node waste. No scale-up coordination. Pods that don't fit stay gated until timeout.
 
 ```yaml
 apiVersion: packer.kompakt.io/v1alpha1
 kind: PackingProfile
 metadata:
-  name: general-cpu-coordination
+  name: binpack-only
 spec:
   demandSource:
     type: ResourceRequest
@@ -35,6 +43,83 @@ spec:
     - name: BinPackOnInflightCapacity
   reservationTimeout: 3m
 ```
+
+### WaitForScaleUp only
+
+Use when you always scale from zero or near-zero and want to prevent redundant node provisioning. The first pod passes through to trigger the autoscaler, subsequent pods wait for the incoming node.
+
+```yaml
+apiVersion: packer.kompakt.io/v1alpha1
+kind: PackingProfile
+metadata:
+  name: scaleup-only
+spec:
+  demandSource:
+    type: ResourceRequest
+    resources: [cpu, memory]
+  capacitySource:
+    type: NodeAllocatable
+    resources: [cpu, memory]
+    nodeGroupTemplates:
+      - namePrefix: pool-cpu-4xlarge
+        allocatable:
+          cpu: 16000
+          memory: 64000000000
+  readinessSignal:
+    nodeConditions:
+      - type: Ready
+        status: "True"
+  rules:
+    - name: WaitForScaleUp
+  reservationTimeout: 3m
+```
+
+`nodeGroupTemplates` tells Kompakt how much capacity the incoming node will have. Without it, Kompakt cannot match pods to in-flight nodes.
+
+### Both rules together
+
+The most common setup. Pods first try to fit on existing capacity (BinPack). If nothing fits, WaitForScaleUp takes over: the first pod triggers the autoscaler, the rest wait.
+
+```yaml
+apiVersion: packer.kompakt.io/v1alpha1
+kind: PackingProfile
+metadata:
+  name: general-cpu-coordination
+spec:
+  demandSource:
+    type: ResourceRequest
+    resources: [cpu, memory]
+  capacitySource:
+    type: NodeAllocatable
+    resources: [cpu, memory]
+    nodeGroupTemplates:
+      - namePrefix: pool-cpu-4xlarge
+        allocatable:
+          cpu: 16000
+          memory: 64000000000
+  readinessSignal:
+    nodeConditions:
+      - type: Ready
+        status: "True"
+  rules:
+    - name: BinPackOnInflightCapacity
+    - name: WaitForScaleUp
+  reservationTimeout: 3m
+```
+
+Rules execute in order. BinPack runs first. If it finds a fit on an existing node, the gate is released immediately. If not, WaitForScaleUp evaluates next.
+
+## Setup
+
+### 1. Create the PackingProfile
+
+Pick the rule combination from above. Apply it:
+
+```bash
+kubectl apply -f packingprofile.yaml
+```
+
+The profile defines HOW to coordinate. It does not select pods. Pods opt in by referencing this profile by name.
 
 ### 2. Label your workloads
 
@@ -87,7 +172,7 @@ kubectl get nodes -w
 
 Without Kompakt, deploying `service-a` (3 replicas) and `service-b` (3 replicas) simultaneously with topology spread constraints on a full cluster would provision up to 6 nodes.
 
-With Kompakt, the same deployment provisions 3 nodes. The controller holds all 6 pods, waits for the autoscaler to start provisioning, and releases them in coordinated batches that share nodes.
+With Kompakt, the same deployment provisions 3 nodes. The first pod triggers a scale-up, subsequent pods are held until capacity is confirmed, then released in coordinated batches that share nodes.
 
 ## Using different profiles for different tiers
 
@@ -126,26 +211,22 @@ spec:
   capacitySource:
     type: NodeAllocatable
     resources: [cpu, memory]
+    nodeGroupTemplates:
+      - namePrefix: pool-batch
+        allocatable:
+          cpu: 32000
+          memory: 128000000000
   readinessSignal:
     nodeConditions:
       - type: Ready
         status: "True"
   rules:
     - name: BinPackOnInflightCapacity
+    - name: WaitForScaleUp
   reservationTimeout: 5m
 ```
 
-Then label pods accordingly:
-
-```yaml
-# Frontend service - short timeout
-labels:
-  packer.kompakt.io/packing-profile: latency-sensitive
-
-# Background worker - longer timeout
-labels:
-  packer.kompakt.io/packing-profile: batch-coordination
-```
+The latency-sensitive profile uses BinPack only with a short timeout -- pods either fit on existing capacity or fall through fast. The batch profile uses both rules with a longer timeout to fully coordinate scale-ups.
 
 ## Tuning the reservation timeout
 
@@ -179,5 +260,6 @@ metadata:
 ## Next steps
 
 - [GPU packing](gpu-packing.md) for fractional GPU workloads
+- [Scale-from-zero GPU](scale-from-zero-gpu.md) for GPU notebook/inference scenarios
 - [Observability](observability.md) for monitoring coordination metrics
 - [Troubleshooting](troubleshooting.md) for debugging gated pods

@@ -25,19 +25,47 @@ spec:
 
 **Available since**: v0.1
 
-The core rule. Evaluates whether the gated pod can be placed on existing or in-flight node capacity using bin-packing.
+Evaluates whether the gated pod can be placed on an existing node with available capacity using bin-packing. Only considers nodes that are already Ready in the cluster.
 
 The algorithm:
 
 1. Read the pod's demand from the PackingProfile's `demandSource`
-2. Query the [node ledger](node-ledger.md) for nodes with available capacity
-3. Try BestFit (smallest sufficient node) or FirstFit (first sufficient node), depending on the profile configuration
-4. If a fit is found, reserve the capacity and release the gate
-5. If no fit exists, keep the gate. The autoscaler will provision a new node, and the pod will be evaluated again once the ledger detects the in-flight node.
+2. Query the [node ledger](node-ledger.md) for existing nodes with available capacity
+3. Pick BestFit (smallest sufficient node) to minimize wasted space
+4. If a fit is found, reserve the capacity and release the gate with node affinity
+5. If no fit exists, keep the gate
 
 This rule handles both CPU/memory and fractional GPU workloads. The demand and capacity sources determine what resources are considered.
 
 **Gate name**: `kompakt.io/awaiting-bin-pack`
+
+### WaitForScaleUp
+
+**Available since**: v0.1
+
+Coordinates pods during node scale-up events. Prevents the cluster autoscaler from over-provisioning by controlling pod visibility.
+
+Three-state decision logic:
+
+1. **No capacity anywhere** (no existing nodes fit, no in-flight nodes): release the gate immediately. The pod becomes visible to the autoscaler and triggers a scale-up. This is the "first mover" -- someone has to signal the autoscaler.
+2. **In-flight node can fit**: hold the gate and reserve capacity on the incoming node. The pod stays invisible to the autoscaler, preventing a redundant scale-up. When the node becomes Ready, the controller re-evaluates and releases with real node affinity.
+3. **Existing node can fit**: release the gate with node affinity to the real node.
+
+Use `capacitySource.nodeGroupTemplates` to declare expected allocatable resources for each node group. Without templates, in-flight nodes have unknown capacity and pods cannot be matched to them.
+
+```yaml
+capacitySource:
+  type: NodeAllocatable
+  resources: [cpu, memory]
+  nodeGroupTemplates:
+    - namePrefix: pool-gpu
+      allocatable:
+        cpu: 16000
+        memory: 64000000000
+        aliyun.com/gpu-mem: 49152
+```
+
+**Gate name**: `kompakt.io/awaiting-scale-up`
 
 ### WaitForImagePrePull
 
@@ -92,6 +120,7 @@ All Kompakt gates use the `kompakt.io/` prefix:
 | Gate name | Rule |
 |---|---|
 | `kompakt.io/awaiting-bin-pack` | BinPackOnInflightCapacity |
+| `kompakt.io/awaiting-scale-up` | WaitForScaleUp |
 | `kompakt.io/awaiting-image-prepull` | WaitForImagePrePull |
 | `kompakt.io/awaiting-mig-reconfig` | WaitForMIGProfile |
 | `kompakt.io/awaiting-colocation` | WaitForCoLocation |

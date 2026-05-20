@@ -88,6 +88,7 @@ Used for GPU sharing systems (cGPU, HAMi, KAI) that express demand via annotatio
 | `resources` | []string | When type=NodeAllocatable | Resource names to read from node allocatable |
 | `label` | string | When type=NodeLabel | Node label key holding total capacity |
 | `perDeviceCount` | [LabelRef](#labelref) | No | Node label indicating device count (for fractional GPU) |
+| `nodeGroupTemplates` | [][NodeGroupTemplate](#nodegrouptemplate) | No | Expected allocatable for in-flight nodes by group name prefix |
 
 ### NodeAllocatable
 
@@ -109,6 +110,26 @@ capacitySource:
   label: aliyun.accelerator/gpu-memory-mib
   perDeviceCount:
     label: aliyun.accelerator/gpu-count
+```
+
+## NodeGroupTemplate
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `namePrefix` | string | Yes | Node group name prefix to match against in-flight node names |
+| `allocatable` | map[string]int64 | Yes | Expected allocatable resources in millivalue |
+
+Used by the `WaitForScaleUp` rule to populate capacity on in-flight nodes detected from the cluster autoscaler. Without templates, in-flight nodes have unknown capacity.
+
+```yaml
+capacitySource:
+  type: NodeAllocatable
+  resources: [cpu, memory]
+  nodeGroupTemplates:
+    - namePrefix: pool-gpu
+      allocatable:
+        cpu: 16000
+        memory: 64000000000
 ```
 
 ## LabelRef
@@ -151,6 +172,7 @@ Allowed values:
 | Name | Version | Gate name |
 |---|---|---|
 | `BinPackOnInflightCapacity` | v0.1 | `kompakt.io/awaiting-bin-pack` |
+| `WaitForScaleUp` | v0.1 | `kompakt.io/awaiting-scale-up` |
 | `WaitForImagePrePull` | v0.2 | `kompakt.io/awaiting-image-prepull` |
 | `WaitForMIGProfile` | v0.3 | `kompakt.io/awaiting-mig-reconfig` |
 | `WaitForCoLocation` | v0.3 | `kompakt.io/awaiting-colocation` |

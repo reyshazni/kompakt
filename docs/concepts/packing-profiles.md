@@ -104,6 +104,7 @@ An ordered list of [rule plugins](rule-plugins.md) to run for matched pods:
 ```yaml
 rules:
   - name: BinPackOnInflightCapacity
+  - name: WaitForScaleUp
 ```
 
 Rules are executed in order. Each rule decides whether the pod's gate should be released. See [Rule Plugins](rule-plugins.md) for available rules.
