@@ -5,11 +5,13 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -86,6 +88,39 @@ func (p *CertProvisioner) Start(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+// ReadyzCheck verifies that TLS cert files exist on disk and are parseable.
+// Used as the readiness probe -- the pod is not ready to serve webhook traffic
+// until certs are provisioned.
+func (p *CertProvisioner) ReadyzCheck(_ *http.Request) error {
+	certPath := filepath.Join(p.cfg.CertDir, "tls.crt")
+	keyPath := filepath.Join(p.cfg.CertDir, "tls.key")
+
+	certPEM, err := os.ReadFile(certPath)
+	if err != nil {
+		return fmt.Errorf("cert file not found: %w", err)
+	}
+	keyPEM, err := os.ReadFile(keyPath)
+	if err != nil {
+		return fmt.Errorf("key file not found: %w", err)
+	}
+
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return fmt.Errorf("invalid cert/key pair: %w", err)
+	}
+
+	leaf, err := x509.ParseCertificate(cert.Certificate[0])
+	if err != nil {
+		return fmt.Errorf("cannot parse cert: %w", err)
+	}
+
+	if time.Now().After(leaf.NotAfter) {
+		return fmt.Errorf("cert expired at %s", leaf.NotAfter.Format(time.RFC3339))
+	}
+
+	return nil
 }
 
 func (p *CertProvisioner) ensureCerts(ctx context.Context) error {

@@ -27,6 +27,9 @@ const (
 	labelProfile       = "packer.kompakt.io/packing-profile"
 	annotationPriority = "kompakt.io/priority"
 	annotationTraceID  = "kompakt.io/trace-id"
+	annotationReason   = "kompakt.io/gate-reason"
+	annotationNode     = "kompakt.io/target-node"
+	annotationHeldBy   = "kompakt.io/held-by"
 	gatePrefix         = "kompakt.io/"
 )
 
@@ -74,7 +77,7 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if errors.IsNotFound(err) {
 			r.recordRelease(pod, profileName, "profile_not_found", "")
 			logger.Info("Gate released", "reason", "profile_not_found")
-			return ctrl.Result{}, r.releaseGates(ctx, pod)
+			return ctrl.Result{}, r.releaseGates(ctx, pod, "profile_not_found")
 		}
 		return ctrl.Result{}, err
 	}
@@ -101,19 +104,20 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	if pod.Annotations[annotationPriority] == "high" {
 		r.recordRelease(pod, profileName, "priority", "")
 		logger.Info("Gate released", "reason", "priority")
-		return ctrl.Result{}, r.releaseGates(ctx, pod)
+		return ctrl.Result{}, r.releaseGates(ctx, pod, "priority")
 	}
 
 	// 8. Check reservation timeout
 	if isTimedOut(pod, profile, logger) {
 		r.recordRelease(pod, profileName, "timeout", "")
 		logger.Info("Gate released", "reason", "timeout")
-		return ctrl.Result{}, r.releaseGates(ctx, pod)
+		return ctrl.Result{}, r.releaseGates(ctx, pod, "timeout")
 	}
 
 	// 9. Run rules
 	allRelease := true
 	var targetNode string
+	var holdingRule string
 	for _, ruleRef := range profile.Spec.Rules {
 		rule, exists := rules.Registry[ruleRef.Name]
 		if !exists {
@@ -134,6 +138,8 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		} else {
 			kompaktmetrics.RuleEvaluationsTotal.WithLabelValues(ruleRef.Name, "hold").Inc()
 			logger.Info("rule holding gate", "rule", ruleRef.Name)
+			r.recordHold(pod, profileName, ruleRef.Name)
+			holdingRule = ruleRef.Name
 			allRelease = false
 			break
 		}
@@ -143,26 +149,41 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	if !allRelease {
+		if err := r.annotatePod(ctx, pod, annotationHeldBy, holdingRule); err != nil {
+			logger.V(1).Info("failed to annotate held-by", "error", err)
+		}
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	// 10. Release gates with optional node affinity
 	r.recordRelease(pod, profileName, "capacity", targetNode)
 	logger.Info("Gate released", "reason", "capacity", "node", targetNode)
-	if err := r.releaseGatesWithAffinity(ctx, pod, targetNode); err != nil {
+	if err := r.releaseGatesWithAffinity(ctx, pod, targetNode, "capacity"); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
 }
 
-// recordRelease records metrics for a gate release event.
-func (r *PackingProfileReconciler) recordRelease(pod *corev1.Pod, profileName, reason, _ string) {
+// recordRelease records metrics and emits a Kubernetes Event for a gate release.
+func (r *PackingProfileReconciler) recordRelease(pod *corev1.Pod, profileName, reason, targetNode string) {
 	kompaktmetrics.GateReleasesTotal.WithLabelValues(profileName, reason).Inc()
 	kompaktmetrics.GatedPods.WithLabelValues(pod.Namespace, profileName).Dec()
 	if !pod.CreationTimestamp.IsZero() {
 		kompaktmetrics.GateHoldDuration.WithLabelValues(profileName, reason).Observe(time.Since(pod.CreationTimestamp.Time).Seconds())
 	}
+
+	msg := fmt.Sprintf("gate released, reason=%s, profile=%s", reason, profileName)
+	if targetNode != "" {
+		msg += fmt.Sprintf(", targetNode=%s", targetNode)
+	}
+	r.Recorder.Event(pod, corev1.EventTypeNormal, "GateReleased", msg)
+}
+
+// recordHold emits a Kubernetes Event when a rule holds the gate.
+func (r *PackingProfileReconciler) recordHold(pod *corev1.Pod, profileName, ruleName string) {
+	r.Recorder.Eventf(pod, corev1.EventTypeNormal, "GateHeld",
+		"gate held by rule %s, profile=%s", ruleName, profileName)
 }
 
 // SetupWithManager registers the reconciler with the manager.
@@ -212,12 +233,22 @@ func hasKompaktGates(pod *corev1.Pod) bool {
 	return false
 }
 
-func (r *PackingProfileReconciler) releaseGates(ctx context.Context, pod *corev1.Pod) error {
-	return r.releaseGatesWithAffinity(ctx, pod, "")
+func (r *PackingProfileReconciler) releaseGates(ctx context.Context, pod *corev1.Pod, reason string) error {
+	return r.releaseGatesWithAffinity(ctx, pod, "", reason)
 }
 
-func (r *PackingProfileReconciler) releaseGatesWithAffinity(ctx context.Context, pod *corev1.Pod, nodeName string) error {
+func (r *PackingProfileReconciler) releaseGatesWithAffinity(ctx context.Context, pod *corev1.Pod, nodeName, reason string) error {
 	patch := client.MergeFrom(pod.DeepCopy())
+
+	// Annotate pod with release reason and target node
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string)
+	}
+	pod.Annotations[annotationReason] = reason
+	if nodeName != "" {
+		pod.Annotations[annotationNode] = nodeName
+	}
+	delete(pod.Annotations, annotationHeldBy)
 
 	// Remove all kompakt gates
 	var remaining []corev1.PodSchedulingGate
@@ -251,6 +282,18 @@ func (r *PackingProfileReconciler) releaseGatesWithAffinity(ctx context.Context,
 		}
 	}
 
+	return r.Patch(ctx, pod, patch)
+}
+
+func (r *PackingProfileReconciler) annotatePod(ctx context.Context, pod *corev1.Pod, key, value string) error {
+	if pod.Annotations != nil && pod.Annotations[key] == value {
+		return nil // already set, skip patch
+	}
+	patch := client.MergeFrom(pod.DeepCopy())
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string)
+	}
+	pod.Annotations[key] = value
 	return r.Patch(ctx, pod, patch)
 }
 
