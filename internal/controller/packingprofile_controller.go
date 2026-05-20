@@ -37,10 +37,11 @@ const (
 // against the node ledger and releasing gates when capacity is available.
 type PackingProfileReconciler struct {
 	client.Client
-	APIReader client.Reader
-	Ledger    *ledger.NodeLedger
-	Detectors []inflight.Detector
-	Recorder  record.EventRecorder
+	APIReader       client.Reader
+	Ledger          *ledger.NodeLedger
+	Detectors       []inflight.Detector
+	Recorder        record.EventRecorder
+	activeDetectors []string // populated per reconcile by syncLedger
 }
 
 // Reconcile handles a single gated pod.
@@ -215,10 +216,11 @@ func (r *PackingProfileReconciler) updateProfileStatus(ctx context.Context, prof
 
 	profile.Status.ActiveGates = activeGates
 	profile.Status.InflightNodes = int32(r.Ledger.Snapshot().InflightCount)
+	profile.Status.ActiveDetectors = r.activeDetectors
 
 	// Set conditions
 	setProfileValidCondition(profile)
-	setInflightDetectionCondition(profile, r.Ledger.Snapshot().InflightCount, r.Detectors)
+	setInflightDetectionCondition(profile, r.Ledger.Snapshot().InflightCount, r.activeDetectors, r.Detectors)
 	setReadyCondition(profile)
 
 	return r.Status().Update(ctx, profile)
@@ -351,6 +353,7 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 	// Deduplicate across detectors. Layer 1 (autoscaler-aware) runs first
 	// in the slice, so its richer data wins over Layer 2 (node-based).
 	seenInflight := make(map[string]bool)
+	r.activeDetectors = nil
 	for _, d := range r.Detectors {
 		nodes, err := d.Detect(ctx, reader)
 		if err != nil {
@@ -376,6 +379,9 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 				}
 			}
 			r.Ledger.AddInflightNode(n.Name, alloc)
+		}
+		if len(nodes) > 0 {
+			r.activeDetectors = append(r.activeDetectors, d.Name())
 		}
 		kompaktmetrics.LedgerInflightNodes.WithLabelValues(d.Name()).Set(float64(len(nodes)))
 	}
@@ -454,14 +460,14 @@ func setLedgerReadyCondition(profile *v1alpha1.PackingProfile, syncErr error) {
 	}
 }
 
-func setInflightDetectionCondition(profile *v1alpha1.PackingProfile, inflightCount int, detectors []inflight.Detector) {
-	if len(detectors) == 0 {
+func setInflightDetectionCondition(profile *v1alpha1.PackingProfile, inflightCount int, activeDetectors []string, allDetectors []inflight.Detector) {
+	if len(allDetectors) == 0 {
 		setCondition(profile, condInflightDetectionActive, metav1.ConditionFalse, "NoDetectors", "no inflight detectors configured")
 		return
 	}
 	if inflightCount > 0 {
 		setCondition(profile, condInflightDetectionActive, metav1.ConditionTrue, "Detected",
-			fmt.Sprintf("%d inflight node(s) detected", inflightCount))
+			fmt.Sprintf("%d inflight node(s) detected by %s", inflightCount, strings.Join(activeDetectors, ", ")))
 	} else {
 		setCondition(profile, condInflightDetectionActive, metav1.ConditionFalse, "NoneDetected", "no inflight nodes detected")
 	}
