@@ -211,7 +211,7 @@ func (r *PackingProfileReconciler) releaseGatesWithAffinity(ctx context.Context,
 	pod.Spec.SchedulingGates = remaining
 
 	// Add node affinity if we have a target
-	if nodeName != "" && !strings.HasPrefix(nodeName, "inflight-") {
+	if nodeName != "" {
 		if pod.Spec.Affinity == nil {
 			pod.Spec.Affinity = &corev1.Affinity{}
 		}

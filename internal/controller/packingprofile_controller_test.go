@@ -375,32 +375,31 @@ func TestReconcile_NodeAffinityInjected(t *testing.T) {
 	}
 }
 
-func TestReconcile_InflightNode_NoAffinityInjected(t *testing.T) {
+func TestReconcile_BinPack_IgnoresInflightNode(t *testing.T) {
+	// BinPack only considers existing nodes. With only inflight capacity,
+	// the pod should stay gated (BinPack returns hold).
 	pod := gatedPod("inflight-pod", 1000)
 	profile := testProfile()
 
-	r, _ := setupReconciler(pod, profile)
-	// Manually add inflight node to ledger (name starts with "inflight-")
+	r, fc := setupReconciler(pod, profile)
 	r.Ledger.AddInflightNode("inflight-gpu-pool-0", map[string]int64{"cpu": 4000})
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "inflight-pod", Namespace: "default"}}
 
-	if _, err := r.Reconcile(context.Background(), req); err != nil {
+	result, err := r.Reconcile(context.Background(), req)
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.RequeueAfter != time.Second {
+		t.Fatalf("expected requeue (BinPack ignores inflight), got %v", result.RequeueAfter)
 	}
 
 	updated := &corev1.Pod{}
-	if err := r.Get(context.Background(), req.NamespacedName, updated); err != nil {
+	if err := fc.Get(context.Background(), req.NamespacedName, updated); err != nil {
 		t.Fatalf("failed to get pod: %v", err)
 	}
-
-	if hasKompaktGates(updated) {
-		t.Fatal("expected gates released")
-	}
-
-	// Should NOT inject affinity for inflight nodes (they don't exist yet)
-	if updated.Spec.Affinity != nil {
-		t.Fatal("expected no affinity for inflight node target")
+	if !hasKompaktGates(updated) {
+		t.Fatal("expected gates to stay (BinPack does not use inflight nodes)")
 	}
 }
 
@@ -537,12 +536,11 @@ func TestReconcile_UnknownRuleName_Skipped(t *testing.T) {
 	}
 }
 
-func TestReconcile_InflightNodeEnrichedFromTemplate(t *testing.T) {
-	// Detector reports a pending node from "pool-gpu" with empty allocatable.
-	// Profile has a NodeGroupTemplate matching "pool-gpu" with 4000m CPU.
-	// The controller should enrich the inflight node, and the pod (1000m) should fit.
-	pod := gatedPod("gpu-pod", 1000)
-	profile := testProfile()
+func TestReconcile_InflightNodeEnrichedFromTemplate_WaitForScaleUp(t *testing.T) {
+	// WaitForScaleUp with enriched inflight node: pod fits on inflight -> hold gate.
+	// This verifies template enrichment works with WaitForScaleUp (hold, not release).
+	pod := scaleUpGatedPod("gpu-pod", 1000)
+	profile := scaleUpProfile()
 	profile.Spec.CapacitySource.NodeGroupTemplates = []v1alpha1.NodeGroupTemplate{
 		{
 			NamePrefix:  "pool-gpu",
@@ -564,16 +562,17 @@ func TestReconcile_InflightNodeEnrichedFromTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.RequeueAfter != 0 {
-		t.Fatalf("expected no requeue (pod should fit on enriched inflight), got %v", result.RequeueAfter)
+	// WaitForScaleUp holds when inflight fits
+	if result.RequeueAfter != time.Second {
+		t.Fatalf("expected requeue (hold on inflight), got %v", result.RequeueAfter)
 	}
 
 	updated := &corev1.Pod{}
 	if err := fc.Get(context.Background(), req.NamespacedName, updated); err != nil {
 		t.Fatalf("failed to get pod: %v", err)
 	}
-	if hasKompaktGates(updated) {
-		t.Fatal("expected gates released, pod should fit on enriched inflight node")
+	if !hasKompaktGates(updated) {
+		t.Fatal("expected gates to stay (WaitForScaleUp holds on inflight)")
 	}
 }
 
@@ -613,5 +612,135 @@ func TestReconcile_InflightNodeNoMatchingTemplate(t *testing.T) {
 	}
 	if !hasKompaktGates(updated) {
 		t.Fatal("expected gates to stay, pod should NOT fit on inflight with empty allocatable")
+	}
+}
+
+func scaleUpProfile() *v1alpha1.PackingProfile {
+	return &v1alpha1.PackingProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-scaleup"},
+		Spec: v1alpha1.PackingProfileSpec{
+			DemandSource: v1alpha1.DemandSource{
+				Type:      "ResourceRequest",
+				Resources: []string{"cpu"},
+			},
+			CapacitySource: v1alpha1.CapacitySource{
+				Type:      "NodeAllocatable",
+				Resources: []string{"cpu"},
+			},
+			ReadinessSignal: v1alpha1.ReadinessSignal{},
+			Rules: []v1alpha1.RuleRef{
+				{Name: "WaitForScaleUp"},
+			},
+			ReservationTimeout: "3m",
+		},
+	}
+}
+
+func scaleUpGatedPod(name string, milliCPU int64) *corev1.Pod {
+	pod := gatedPod(name, milliCPU)
+	pod.Labels[labelProfile] = "test-scaleup"
+	pod.Spec.SchedulingGates = []corev1.PodSchedulingGate{
+		{Name: "kompakt.io/awaiting-scale-up"},
+	}
+	return pod
+}
+
+func TestReconcile_WaitForScaleUp_Passthrough(t *testing.T) {
+	// No nodes, no inflight. Pod should be released (passthrough) to trigger autoscaler.
+	pod := scaleUpGatedPod("first-pod", 1000)
+	profile := scaleUpProfile()
+
+	r, fc := setupReconciler(pod, profile)
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "first-pod", Namespace: "default"}}
+
+	result, err := r.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.RequeueAfter != 0 {
+		t.Fatalf("expected no requeue (passthrough), got %v", result.RequeueAfter)
+	}
+
+	updated := &corev1.Pod{}
+	if err := fc.Get(context.Background(), req.NamespacedName, updated); err != nil {
+		t.Fatalf("failed to get pod: %v", err)
+	}
+	if hasKompaktGates(updated) {
+		t.Fatal("expected gates released for passthrough (no capacity anywhere)")
+	}
+	// No affinity should be set -- pod passes through to autoscaler
+	if updated.Spec.Affinity != nil {
+		t.Fatal("expected no affinity for passthrough release")
+	}
+}
+
+func TestReconcile_WaitForScaleUp_HoldOnInflight(t *testing.T) {
+	// Inflight node can fit. Pod should stay gated.
+	pod := scaleUpGatedPod("second-pod", 1000)
+	profile := scaleUpProfile()
+	profile.Spec.CapacitySource.NodeGroupTemplates = []v1alpha1.NodeGroupTemplate{
+		{NamePrefix: "pool-gpu", Allocatable: map[string]int64{"cpu": 4000}},
+	}
+
+	detector := &fakeDetector{
+		nodes: []inflight.InflightNode{
+			{Name: "pool-gpu-pending-0", Allocatable: map[string]int64{}},
+		},
+	}
+
+	r, fc := setupReconciler(pod, profile)
+	r.Detectors = []inflight.Detector{detector}
+
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "second-pod", Namespace: "default"}}
+	result, err := r.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.RequeueAfter != time.Second {
+		t.Fatalf("expected requeue (hold), got %v", result.RequeueAfter)
+	}
+
+	updated := &corev1.Pod{}
+	if err := fc.Get(context.Background(), req.NamespacedName, updated); err != nil {
+		t.Fatalf("failed to get pod: %v", err)
+	}
+	if !hasKompaktGates(updated) {
+		t.Fatal("expected gates to stay when inflight node can fit")
+	}
+}
+
+func TestReconcile_WaitForScaleUp_ReleaseWithAffinity(t *testing.T) {
+	// Existing node has capacity. Pod should be released with real node affinity.
+	pod := scaleUpGatedPod("ready-pod", 1000)
+	node := testNode("cn-jakarta.172.16.1.10", 4000)
+	profile := scaleUpProfile()
+
+	r, fc := setupReconciler(pod, node, profile)
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "ready-pod", Namespace: "default"}}
+
+	result, err := r.Reconcile(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.RequeueAfter != 0 {
+		t.Fatalf("expected no requeue (release), got %v", result.RequeueAfter)
+	}
+
+	updated := &corev1.Pod{}
+	if err := fc.Get(context.Background(), req.NamespacedName, updated); err != nil {
+		t.Fatalf("failed to get pod: %v", err)
+	}
+	if hasKompaktGates(updated) {
+		t.Fatal("expected gates released when existing node has capacity")
+	}
+	// Should have affinity to real node
+	if updated.Spec.Affinity == nil ||
+		updated.Spec.Affinity.NodeAffinity == nil ||
+		updated.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
+		t.Fatal("expected node affinity to real node")
+	}
+	terms := updated.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
+	if terms[0].MatchExpressions[0].Values[0] != "cn-jakarta.172.16.1.10" {
+		t.Fatalf("expected affinity to cn-jakarta.172.16.1.10, got %s", terms[0].MatchExpressions[0].Values[0])
 	}
 }
