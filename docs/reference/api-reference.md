@@ -173,9 +173,8 @@ Allowed values:
 |---|---|---|
 | `BinPackOnInflightCapacity` | v0.1 | `kompakt.io/awaiting-bin-pack` |
 | `WaitForScaleUp` | v0.1 | `kompakt.io/awaiting-scale-up` |
-| `WaitForImagePrePull` | v0.2 | `kompakt.io/awaiting-image-prepull` |
-| `WaitForMIGProfile` | v0.3 | `kompakt.io/awaiting-mig-reconfig` |
-| `WaitForCoLocation` | v0.3 | `kompakt.io/awaiting-colocation` |
+
+Planned for future releases: `WaitForImagePrePull` (v0.2), `WaitForMIGProfile` (v0.3), `WaitForCoLocation` (v0.3).
 
 ## status
 

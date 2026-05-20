@@ -67,32 +67,6 @@ capacitySource:
 
 **Gate name**: `kompakt.io/awaiting-scale-up`
 
-### WaitForImagePrePull
-
-**Available since**: v0.2
-
-Holds the gate until the pod's container images are pre-pulled on the target node. Useful for workloads with multi-GB images (common in ML inference) where image pull time dominates startup latency.
-
-The rule coordinates with a pre-pull DaemonSet or Job to ensure images are available before releasing the gate.
-
-**Gate name**: `kompakt.io/awaiting-image-prepull`
-
-### WaitForMIGProfile
-
-**Available since**: v0.3
-
-Holds the gate until the target GPU node's MIG (Multi-Instance GPU) profile matches what the pod needs. MIG reconfiguration requires draining the GPU, changing the profile, and restarting the device plugin. This rule coordinates that process.
-
-**Gate name**: `kompakt.io/awaiting-mig-reconfig`
-
-### WaitForCoLocation
-
-**Available since**: v0.3
-
-Holds the gate until a set of related pods can be placed on the same node or in the same topology zone. Used for workloads that benefit from data locality or low-latency inter-pod communication.
-
-**Gate name**: `kompakt.io/awaiting-colocation`
-
 ## Multiple rules
 
 A profile can specify multiple rules. They execute in order, and all must agree to release:
@@ -101,14 +75,16 @@ A profile can specify multiple rules. They execute in order, and all must agree 
 spec:
   rules:
     - name: BinPackOnInflightCapacity
-    - name: WaitForImagePrePull
+    - name: WaitForScaleUp
 ```
 
-In this example, the pod stays gated until both capacity is available AND images are pre-pulled. The gate names for each rule are injected independently, so you can see which rule is still holding a pod:
+In this example, BinPack runs first. If an existing node has capacity, the pod is released immediately. If not, WaitForScaleUp evaluates next: passthrough if nothing is coming, hold if an in-flight node can fit.
+
+The gate names for each rule are injected independently, so you can see which rule is still holding a pod:
 
 ```bash
 kubectl get pod my-pod -o jsonpath='{.spec.schedulingGates[*].name}'
-# kompakt.io/awaiting-bin-pack kompakt.io/awaiting-image-prepull
+# kompakt.io/awaiting-bin-pack kompakt.io/awaiting-scale-up
 ```
 
 As each rule is satisfied, its gate is removed. The pod schedules once all gates are gone.
@@ -121,8 +97,15 @@ All Kompakt gates use the `kompakt.io/` prefix:
 |---|---|
 | `kompakt.io/awaiting-bin-pack` | BinPackOnInflightCapacity |
 | `kompakt.io/awaiting-scale-up` | WaitForScaleUp |
-| `kompakt.io/awaiting-image-prepull` | WaitForImagePrePull |
-| `kompakt.io/awaiting-mig-reconfig` | WaitForMIGProfile |
-| `kompakt.io/awaiting-colocation` | WaitForCoLocation |
 
 This makes it easy to identify which Kompakt rule is holding each pod.
+
+## Roadmap
+
+The following rules are planned for future releases:
+
+| Rule | Version | Purpose | Gate name |
+|---|---|---|---|
+| WaitForImagePrePull | v0.2 | Hold gate until large container images are pre-pulled on the target node | `kompakt.io/awaiting-image-prepull` |
+| WaitForMIGProfile | v0.3 | Hold gate until GPU MIG profile reconfiguration completes | `kompakt.io/awaiting-mig-reconfig` |
+| WaitForCoLocation | v0.3 | Hold gate until co-located pods can be placed together | `kompakt.io/awaiting-colocation` |

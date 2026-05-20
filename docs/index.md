@@ -2,7 +2,7 @@
 
 **Keep your cluster compact.**
 
-Kompakt is a Kubernetes admission-time coordinator that prevents cluster autoscalers from over-provisioning nodes. It gates pods via [scheduling gates](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/) (GA in K8s v1.30) and bin-packs scale-up events across all workload types: Deployments, StatefulSets, Jobs, KServe, Argo, Ray, and anything else that creates pods.
+Kompakt is a Kubernetes admission-time coordinator that prevents cluster autoscalers from over-provisioning nodes. It uses [scheduling gates](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/) (GA in K8s v1.30) to control when pods become visible to the scheduler and autoscaler, coordinating scale-up events across all workload types: Deployments, StatefulSets, Jobs, KServe, Argo, Ray, and anything else that creates pods.
 
 - No custom scheduler
 - No privileged DaemonSets
@@ -15,11 +15,21 @@ When multiple unschedulable pods appear at the same time, the cluster autoscaler
 
 This affects every major cloud running the upstream cluster autoscaler.
 
-## How Kompakt solves it
+## What Kompakt does
 
-1. **Webhook** intercepts pod creation, matches against `PackingProfile` CRDs, injects `spec.schedulingGates`
-2. **Controller** maintains an in-flight node ledger tracking existing capacity and pending autoscaler nodes
-3. **Gate released** with node affinity when capacity is available
+Kompakt coordinates pods in two ways, depending on which rules you configure:
+
+**Pack onto existing capacity** (`BinPackOnInflightCapacity`): When your cluster has running nodes with spare capacity, Kompakt finds the best-fit node and releases the pod with node affinity. Minimizes wasted resources across existing nodes.
+
+**Coordinate scale-ups** (`WaitForScaleUp`): When the cluster needs new nodes, Kompakt lets the first pod through to trigger the autoscaler, then holds subsequent pods until the new node is ready. Prevents the autoscaler from provisioning redundant nodes.
+
+You can use one or both rules per profile. For most production clusters, both rules together provide the best results.
+
+## How it works
+
+1. **Webhook** intercepts pod creation, matches against a `PackingProfile` CRD, injects scheduling gates
+2. **Controller** maintains a node ledger tracking existing capacity and pending autoscaler nodes
+3. **Rules** evaluate each gated pod: release immediately, hold for incoming node, or release with node affinity
 4. **Your existing scheduler and autoscaler** continue working untouched
 
 ## What Kompakt does not do
