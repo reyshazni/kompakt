@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -471,7 +472,8 @@ func TestIsTimedOut_InvalidDuration(t *testing.T) {
 		},
 	}
 	// Invalid duration falls back to 3m. Pod created 4m ago > 3m -> timed out
-	if !isTimedOut(pod, profile) {
+	nopLogger := logr.Discard()
+	if !isTimedOut(pod, profile, nopLogger) {
 		t.Fatal("expected timeout with invalid duration (fallback 3m) and 4m-old pod")
 	}
 }
@@ -479,7 +481,7 @@ func TestIsTimedOut_InvalidDuration(t *testing.T) {
 func TestIsTimedOut_ZeroTimestamp(t *testing.T) {
 	pod := &corev1.Pod{}
 	profile := testProfile()
-	if isTimedOut(pod, profile) {
+	if isTimedOut(pod, profile, logr.Discard()) {
 		t.Fatal("expected not timed out with zero creation timestamp")
 	}
 }

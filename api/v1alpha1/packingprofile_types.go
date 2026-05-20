@@ -80,9 +80,13 @@ type CapacitySource struct {
 // actual allocatable is unknown until they arrive.
 type NodeGroupTemplate struct {
 	// NamePrefix is the node group name prefix to match against inflight node names.
+	// Must not be empty.
+	// +kubebuilder:validation:MinLength=1
 	NamePrefix string `json:"namePrefix"`
 
 	// Allocatable is the expected allocatable resources in millivalue.
+	// Must contain at least one resource entry.
+	// +kubebuilder:validation:MinProperties=1
 	Allocatable map[string]int64 `json:"allocatable"`
 }
 

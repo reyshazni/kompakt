@@ -83,31 +83,36 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 	}()
 
-	// 5. Sync ledger from cluster state
+	// 5. Warn on misconfigured profile
+	warnProfileMisconfig(logger, profile)
+
+	// 6. Sync ledger from cluster state
 	if err := r.syncLedger(ctx, logger, profile); err != nil {
+		logger.Error(err, "ledger sync failed, retrying")
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
-	// 6. Check priority override
+	// 7. Check priority override
 	if pod.Annotations[annotationPriority] == "high" {
 		r.recordRelease(pod, profileName, "priority", "")
 		logger.Info("Gate released", "reason", "priority")
 		return ctrl.Result{}, r.releaseGates(ctx, pod)
 	}
 
-	// 7. Check reservation timeout
-	if isTimedOut(pod, profile) {
+	// 8. Check reservation timeout
+	if isTimedOut(pod, profile, logger) {
 		r.recordRelease(pod, profileName, "timeout", "")
 		logger.Info("Gate released", "reason", "timeout")
 		return ctrl.Result{}, r.releaseGates(ctx, pod)
 	}
 
-	// 8. Run rules
+	// 9. Run rules
 	allRelease := true
 	var targetNode string
 	for _, ruleRef := range profile.Spec.Rules {
 		rule, exists := rules.Registry[ruleRef.Name]
 		if !exists {
+			logger.Info("unknown rule skipped, check profile spec", "rule", ruleRef.Name)
 			continue
 		}
 		evalStart := time.Now()
@@ -120,8 +125,10 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 		if release {
 			kompaktmetrics.RuleEvaluationsTotal.WithLabelValues(ruleRef.Name, "release").Inc()
+			logger.V(1).Info("rule released gate", "rule", ruleRef.Name, "node", nodeName)
 		} else {
 			kompaktmetrics.RuleEvaluationsTotal.WithLabelValues(ruleRef.Name, "hold").Inc()
+			logger.Info("rule holding gate", "rule", ruleRef.Name)
 			allRelease = false
 			break
 		}
@@ -134,7 +141,7 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
-	// 9. Release gates with optional node affinity
+	// 10. Release gates with optional node affinity
 	r.recordRelease(pod, profileName, "capacity", targetNode)
 	logger.Info("Gate released", "reason", "capacity", "node", targetNode)
 	if err := r.releaseGatesWithAffinity(ctx, pod, targetNode); err != nil {
@@ -297,6 +304,12 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 			alloc := n.Allocatable
 			if len(alloc) == 0 {
 				alloc = matchNodeGroupTemplate(n.Name, profile.Spec.CapacitySource.NodeGroupTemplates)
+				if alloc != nil {
+					logger.V(1).Info("inflight node enriched from template", "node", n.Name, "allocatable", alloc)
+				} else {
+					logger.Info("inflight node has no matching template, capacity unknown",
+						"node", n.Name, "configuredPrefixes", templatePrefixes(profile.Spec.CapacitySource.NodeGroupTemplates))
+				}
 			}
 			r.Ledger.AddInflightNode(n.Name, alloc)
 		}
@@ -304,6 +317,42 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 	}
 
 	return nil
+}
+
+// warnProfileMisconfig logs warnings for common profile misconfiguration.
+// These are not errors (the profile is valid per the CRD schema) but indicate
+// likely user mistakes that will cause unexpected behavior.
+func warnProfileMisconfig(logger logr.Logger, profile *v1alpha1.PackingProfile) {
+	ds := profile.Spec.DemandSource
+	if ds.Type == "ResourceRequest" && len(ds.Resources) == 0 {
+		logger.Info("demandSource.type=ResourceRequest but resources list is empty, all pods will have zero demand")
+	}
+	if ds.Type == "Annotation" && ds.Annotation == "" {
+		logger.Info("demandSource.type=Annotation but annotation field is empty, all pods will have zero demand")
+	}
+	cs := profile.Spec.CapacitySource
+	if cs.Type == "NodeLabel" && cs.Label == "" {
+		logger.Info("capacitySource.type=NodeLabel but label field is empty")
+	}
+
+	hasScaleUpRule := false
+	for _, r := range profile.Spec.Rules {
+		if r.Name == "WaitForScaleUp" {
+			hasScaleUpRule = true
+			break
+		}
+	}
+	if hasScaleUpRule && len(cs.NodeGroupTemplates) == 0 {
+		logger.Info("WaitForScaleUp rule configured but no nodeGroupTemplates defined, inflight nodes will have unknown capacity")
+	}
+}
+
+func templatePrefixes(templates []v1alpha1.NodeGroupTemplate) []string {
+	prefixes := make([]string, len(templates))
+	for i, t := range templates {
+		prefixes[i] = t.NamePrefix
+	}
+	return prefixes
 }
 
 // matchNodeGroupTemplate finds the first NodeGroupTemplate whose NamePrefix
@@ -322,12 +371,14 @@ func matchNodeGroupTemplate(nodeName string, templates []v1alpha1.NodeGroupTempl
 	return nil
 }
 
-func isTimedOut(pod *corev1.Pod, profile *v1alpha1.PackingProfile) bool {
+func isTimedOut(pod *corev1.Pod, profile *v1alpha1.PackingProfile, logger logr.Logger) bool {
 	if pod.CreationTimestamp.IsZero() {
 		return false
 	}
 	timeout, err := time.ParseDuration(profile.Spec.ReservationTimeout)
 	if err != nil {
+		logger.Info("invalid reservationTimeout, using default 3m",
+			"value", profile.Spec.ReservationTimeout, "error", err)
 		timeout = 3 * time.Minute
 	}
 	return time.Since(pod.CreationTimestamp.Time) > timeout

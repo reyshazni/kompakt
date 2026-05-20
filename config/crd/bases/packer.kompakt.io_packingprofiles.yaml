@@ -83,12 +83,16 @@ spec:
                           additionalProperties:
                             format: int64
                             type: integer
-                          description: Allocatable is the expected allocatable resources
-                            in millivalue.
+                          description: |-
+                            Allocatable is the expected allocatable resources in millivalue.
+                            Must contain at least one resource entry.
+                          minProperties: 1
                           type: object
                         namePrefix:
-                          description: NamePrefix is the node group name prefix to
-                            match against inflight node names.
+                          description: |-
+                            NamePrefix is the node group name prefix to match against inflight node names.
+                            Must not be empty.
+                          minLength: 1
                           type: string
                       required:
                       - allocatable

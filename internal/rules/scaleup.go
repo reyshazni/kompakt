@@ -47,11 +47,16 @@ func (r *WaitForScaleUp) Evaluate(
 
 	if isInflight {
 		// In-flight node can fit -- hold gate, reserve capacity
-		_ = l.Reserve(nodeName, demand)
+		if err := l.Reserve(nodeName, demand); err != nil {
+			// Reserve failed (race with another pod), treat as no fit
+			return true, "", nil
+		}
 		return false, "", nil
 	}
 
 	// Existing node can fit -- release with real node affinity
-	_ = l.Reserve(nodeName, demand)
+	if err := l.Reserve(nodeName, demand); err != nil {
+		return false, "", nil
+	}
 	return true, nodeName, nil
 }
