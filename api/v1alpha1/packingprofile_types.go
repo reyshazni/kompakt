@@ -126,10 +126,11 @@ type PackingProfileStatus struct {
 	// ActiveGates is the number of pods currently gated by this profile.
 	ActiveGates int32 `json:"activeGates,omitempty"`
 
-	// ActiveReservations is the number of capacity reservations held.
-	ActiveReservations int32 `json:"activeReservations,omitempty"`
+	// InflightNodes is the number of in-flight nodes detected for this profile.
+	InflightNodes int32 `json:"inflightNodes,omitempty"`
 
-	// Conditions represent the latest available observations.
+	// Conditions represent the latest available observations of the profile state.
+	// Known condition types: ProfileValid, LedgerReady, InflightDetectionActive.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 

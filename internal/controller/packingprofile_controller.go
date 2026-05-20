@@ -2,12 +2,14 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -77,7 +79,9 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
+	var ledgerSyncErr error
 	defer func() {
+		setLedgerReadyCondition(profile, ledgerSyncErr)
 		if err := r.updateProfileStatus(ctx, profile); err != nil {
 			logger.Error(err, "failed to update profile status")
 		}
@@ -87,8 +91,9 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	warnProfileMisconfig(logger, profile)
 
 	// 6. Sync ledger from cluster state
-	if err := r.syncLedger(ctx, logger, profile); err != nil {
-		logger.Error(err, "ledger sync failed, retrying")
+	ledgerSyncErr = r.syncLedger(ctx, logger, profile)
+	if ledgerSyncErr != nil {
+		logger.Error(ledgerSyncErr, "ledger sync failed, retrying")
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
@@ -188,7 +193,12 @@ func (r *PackingProfileReconciler) updateProfileStatus(ctx context.Context, prof
 	}
 
 	profile.Status.ActiveGates = activeGates
-	profile.Status.ActiveReservations = activeGates
+	profile.Status.InflightNodes = int32(r.Ledger.Snapshot().InflightCount)
+
+	// Set conditions
+	setProfileValidCondition(profile)
+	setInflightDetectionCondition(profile, r.Ledger.Snapshot().InflightCount, r.Detectors)
+
 	return r.Status().Update(ctx, profile)
 }
 
@@ -317,6 +327,89 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 	}
 
 	return nil
+}
+
+const (
+	condProfileValid            = "ProfileValid"
+	condLedgerReady             = "LedgerReady"
+	condInflightDetectionActive = "InflightDetectionActive"
+)
+
+func setCondition(profile *v1alpha1.PackingProfile, condType string, status metav1.ConditionStatus, reason, message string) {
+	now := metav1.Now()
+	for i, c := range profile.Status.Conditions {
+		if c.Type == condType {
+			if c.Status != status || c.Reason != reason {
+				profile.Status.Conditions[i].Status = status
+				profile.Status.Conditions[i].Reason = reason
+				profile.Status.Conditions[i].Message = message
+				profile.Status.Conditions[i].LastTransitionTime = now
+			}
+			return
+		}
+	}
+	profile.Status.Conditions = append(profile.Status.Conditions, metav1.Condition{
+		Type:               condType,
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		LastTransitionTime: now,
+	})
+}
+
+func setProfileValidCondition(profile *v1alpha1.PackingProfile) {
+	var issues []string
+
+	ds := profile.Spec.DemandSource
+	if ds.Type == "ResourceRequest" && len(ds.Resources) == 0 {
+		issues = append(issues, "demandSource.type=ResourceRequest but resources is empty")
+	}
+	if ds.Type == "Annotation" && ds.Annotation == "" {
+		issues = append(issues, "demandSource.type=Annotation but annotation is empty")
+	}
+
+	cs := profile.Spec.CapacitySource
+	if cs.Type == "NodeLabel" && cs.Label == "" {
+		issues = append(issues, "capacitySource.type=NodeLabel but label is empty")
+	}
+
+	hasScaleUp := false
+	for _, r := range profile.Spec.Rules {
+		if r.Name == "WaitForScaleUp" {
+			hasScaleUp = true
+			break
+		}
+	}
+	if hasScaleUp && len(cs.NodeGroupTemplates) == 0 {
+		issues = append(issues, "WaitForScaleUp rule requires nodeGroupTemplates")
+	}
+
+	if len(issues) > 0 {
+		setCondition(profile, condProfileValid, metav1.ConditionFalse, "ConfigurationError", strings.Join(issues, "; "))
+	} else {
+		setCondition(profile, condProfileValid, metav1.ConditionTrue, "Valid", "profile configuration is valid")
+	}
+}
+
+func setLedgerReadyCondition(profile *v1alpha1.PackingProfile, syncErr error) {
+	if syncErr != nil {
+		setCondition(profile, condLedgerReady, metav1.ConditionFalse, "SyncFailed", syncErr.Error())
+	} else {
+		setCondition(profile, condLedgerReady, metav1.ConditionTrue, "Synced", "ledger synced from cluster state")
+	}
+}
+
+func setInflightDetectionCondition(profile *v1alpha1.PackingProfile, inflightCount int, detectors []inflight.Detector) {
+	if len(detectors) == 0 {
+		setCondition(profile, condInflightDetectionActive, metav1.ConditionFalse, "NoDetectors", "no inflight detectors configured")
+		return
+	}
+	if inflightCount > 0 {
+		setCondition(profile, condInflightDetectionActive, metav1.ConditionTrue, "Detected",
+			fmt.Sprintf("%d inflight node(s) detected", inflightCount))
+	} else {
+		setCondition(profile, condInflightDetectionActive, metav1.ConditionFalse, "NoneDetected", "no inflight nodes detected")
+	}
 }
 
 // warnProfileMisconfig logs warnings for common profile misconfiguration.
