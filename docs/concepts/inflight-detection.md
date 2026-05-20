@@ -6,13 +6,23 @@ Kompakt needs to know about nodes that are being provisioned but not yet Ready. 
 
 Kompakt does not care which cloud your cluster runs on. It cares which autoscaler is running and how that autoscaler signals scale-up events. All data comes from the Kubernetes API. Kompakt never calls cloud APIs and never requires cloud credentials.
 
-Detectors are organized by autoscaler, not by cloud:
+Detection works in two layers that run in parallel:
+
+**Layer 1: Autoscaler-aware** detects scale-up before the Node object exists in Kubernetes. This covers the critical window between the autoscaler's decision and node registration.
 
 | Detector | Autoscaler | Signal | Clouds |
 |---|---|---|---|
 | ClusterAutoscalerDetector | Upstream CA | `cluster-autoscaler-status` ConfigMap | EKS, GKE, AKS, self-managed |
 | GOATScalerDetector | ACK GOATScaler | `ProvisionNode` pod events | Alibaba ACK |
 | KarpenterDetector (planned) | Karpenter | `NodeClaim` CRD resources | EKS, AKS (NAP) |
+
+**Layer 2: Node-based** detects nodes that exist in Kubernetes but have never been Ready. This covers the secondary window while the node initializes (GPU driver, device plugin, CNI). Typically 2-5 minutes for GPU nodes. Works on every cloud and every autoscaler, including custom autoscalers that Kompakt does not know about.
+
+| Detector | Signal | Clouds |
+|---|---|---|
+| NotReadyNodeDetector | Nodes where Ready!=True and never been Ready | All |
+
+Both layers run on every reconcile. Results are deduplicated by node name. Layer 1 provides earlier and richer data. Layer 2 serves as a universal safety net.
 
 One autoscaler can serve multiple clouds (CA runs on EKS, GKE, and AKS). One cloud can have multiple autoscaler options (ACK supports both GOATScaler and upstream CA).
 
@@ -70,4 +80,4 @@ Without templates, in-flight nodes have unknown capacity and WaitForScaleUp cann
 
 ## Fallback behavior
 
-If no detector finds in-flight nodes, WaitForScaleUp still works. It uses passthrough: the first pod is released immediately to trigger the autoscaler, subsequent pods are released when the node becomes Ready (detected as an existing node by the regular ledger sync). This is slower (pods wait until the node is fully Ready) but still prevents over-provisioning through timeout-based coordination.
+If neither layer detects in-flight nodes (e.g., the autoscaler is completely unknown and nodes appear instantly as Ready), WaitForScaleUp still works. It uses passthrough: the first pod is released immediately to trigger the autoscaler, subsequent pods are released when the node becomes Ready (detected as an existing node by the regular ledger sync). This is slower but still prevents over-provisioning through coordinated release.
