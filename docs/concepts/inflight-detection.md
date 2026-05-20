@@ -1,98 +1,73 @@
 # In-flight Node Detection
 
-Kompakt needs to know about nodes that are being provisioned but are not yet Ready. This is how the controller avoids double-provisioning: if the autoscaler is already bringing up a node, Kompakt can reserve capacity on that incoming node instead of letting the autoscaler provision yet another one.
+Kompakt needs to know about nodes that are being provisioned but not yet Ready. This is how WaitForScaleUp avoids double-provisioning: if the autoscaler is already bringing up a node, Kompakt holds subsequent pods instead of letting the autoscaler provision another one.
 
-## How it works
+## Autoscaler-aware, not cloud-aware
 
-The controller runs cloud-specific adapters that watch for signals indicating a node is being provisioned. Each adapter reads publicly available Kubernetes resources. Kompakt never calls cloud APIs directly and never requires cloud-specific credentials.
+Kompakt does not care which cloud your cluster runs on. It cares which autoscaler is running and how that autoscaler signals scale-up events. All data comes from the Kubernetes API. Kompakt never calls cloud APIs and never requires cloud credentials.
 
-When an adapter detects an in-flight node, it reports the expected capacity (instance type, resource allocatable) to the [node ledger](node-ledger.md). The ledger then includes this capacity in bin-packing decisions.
+Detectors are organized by autoscaler, not by cloud:
 
-## Adapters
+| Detector | Autoscaler | Signal | Clouds |
+|---|---|---|---|
+| ClusterAutoscalerDetector | Upstream CA | `cluster-autoscaler-status` ConfigMap | EKS, GKE, AKS, self-managed |
+| GOATScalerDetector | ACK GOATScaler | `ProvisionNode` pod events | Alibaba ACK |
+| KarpenterDetector (planned) | Karpenter | `NodeClaim` CRD resources | EKS, AKS (NAP) |
 
-### Cluster Autoscaler (CA)
+One autoscaler can serve multiple clouds (CA runs on EKS, GKE, and AKS). One cloud can have multiple autoscaler options (ACK supports both GOATScaler and upstream CA).
 
-**Supported clouds**: All (EKS, GKE, AKS, ACK, and TKE)
+## Auto-discovery
 
-The upstream cluster autoscaler writes a `cluster-autoscaler-status` ConfigMap in `kube-system`. This ConfigMap contains information about pending scale-up events, including:
+All detectors run in parallel on every reconcile cycle. Each detector probes for its signal source:
 
-- Which node groups are scaling
-- How many nodes are being added
-- The instance type and expected capacity
+- Signal found: parse and return in-flight nodes
+- Signal not found: return empty (not an error)
 
-Kompakt reads this ConfigMap (read-only) to detect in-flight nodes.
+No configuration needed. On ACK, the CA detector finds no ConfigMap and returns nothing; the GOATScaler detector finds `ProvisionNode` events and returns in-flight nodes. On EKS with CA, the CA detector finds the ConfigMap; the GOATScaler detector finds no events. Both work automatically.
 
-```yaml
-# What Kompakt reads (not what you configure)
-# kube-system/cluster-autoscaler-status ConfigMap
-data:
-  status: |
-    ScaleUp:
-      - nodeGroup: pool-cpu-4xlarge
-        newSize: 5
-        oldSize: 3
+## Cluster Autoscaler detector
+
+Reads the `cluster-autoscaler-status` ConfigMap in `kube-system`. This ConfigMap contains the names of node groups being scaled and how many nodes are pending.
+
+The ConfigMap is written by the upstream Cluster Autoscaler and follows a standard format across clouds. If the ConfigMap does not exist (e.g., the cluster uses a different autoscaler), the detector silently returns nothing.
+
+## GOATScaler detector
+
+Watches Kubernetes Events on pods where `source.component` is `GOATScaler` and `reason` is `ProvisionNode`. This is the earliest signal that a scale-up is happening on ACK. The event fires when GOATScaler decides to provision, before the ECS API call, before the Node object exists in Kubernetes.
+
+The event message contains the expected node name, availability zone, and instance type:
+
+```
+Provision node asa-xxx in Zone: ap-southeast-5a with InstanceType: ecs.gn8is.4xlarge
 ```
 
-### Karpenter
+The instance type is matched against `nodeGroupTemplates` in the PackingProfile to determine expected allocatable resources.
 
-**Supported clouds**: AWS (EKS), Azure (AKS with NAP)
+## Template enrichment
 
-Karpenter creates `NodeClaim` custom resources when provisioning nodes. The controller watches these resources to detect in-flight nodes.
+Detected in-flight nodes often have unknown allocatable resources (the node does not exist yet, so there is nothing to read). The `nodeGroupTemplates` field in `capacitySource` provides this information:
 
 ```yaml
-# What Kompakt watches (not what you configure)
-apiVersion: karpenter.sh/v1
-kind: NodeClaim
-metadata:
-  name: nc-xxxxx
-status:
-  conditions:
-    - type: Initialized
-      status: "False"  # not yet ready
-  allocatable:
-    cpu: "16"
-    memory: 64Gi
+capacitySource:
+  type: NodeAllocatable
+  resources: [cpu, memory]
+  nodeGroupTemplates:
+    - instanceType: ecs.gn8is.4xlarge
+      allocatable:
+        aliyun.com/gpu-mem: 49152
+    - namePrefix: pool-cpu-4xlarge
+      allocatable:
+        cpu: 16000
+        memory: 64000000000
 ```
 
-### ack-goatscaler
+Matching priority:
 
-**Supported clouds**: Alibaba ACK
+1. `instanceType`: matched against the instance type from GOATScaler events
+2. `namePrefix`: matched against the node name from CA status
 
-Alibaba's custom autoscaler. Adapter behavior is under research. Documented support matrix will be published before v0.1 release.
-
-**Fallback**: If ack-goatscaler signals are unavailable, the controller falls back to watching new Node objects that appear without the `Ready` condition.
-
-### GKE Node Auto-Provisioning (NAP)
-
-**Supported clouds**: GKE Standard
-
-GKE NAP creates new node pools when existing pools cannot satisfy demand. The adapter watches for new NodePool resources in pending state.
+Without templates, in-flight nodes have unknown capacity and WaitForScaleUp cannot hold pods for them.
 
 ## Fallback behavior
 
-If no adapter detects in-flight nodes (e.g., unsupported autoscaler, cloud-specific signal unavailable), the controller still works. It will:
-
-1. Gate matched pods
-2. Wait for the autoscaler to provision a node
-3. Detect the new node when it appears with `Ready=True`
-4. Release the gate at that point
-
-This fallback is slower (the gate is held until the node is fully ready rather than reserved during provisioning) but still prevents over-provisioning by coordinating which pods are released together.
-
-## Configuration
-
-In-flight detection adapters are auto-detected based on what resources exist in the cluster. No manual configuration is needed.
-
-If you want to disable a specific adapter (e.g., for testing), use the controller flag:
-
-```bash
---disable-inflight-adapter=karpenter
-```
-
-Or in the Helm chart:
-
-```yaml
-controller:
-  args:
-    - --disable-inflight-adapter=karpenter
-```
+If no detector finds in-flight nodes, WaitForScaleUp still works. It uses passthrough: the first pod is released immediately to trigger the autoscaler, subsequent pods are released when the node becomes Ready (detected as an existing node by the regular ledger sync). This is slower (pods wait until the node is fully Ready) but still prevents over-provisioning through timeout-based coordination.
