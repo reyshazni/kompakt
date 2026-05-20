@@ -156,6 +156,32 @@ func (l *NodeLedger) FindFit(demand map[string]int64) (string, error) {
 	return bestName, nil
 }
 
+// LedgerSnapshot holds a point-in-time summary of ledger state for metrics.
+type LedgerSnapshot struct {
+	NodeCount        int
+	InflightCount    int
+	TotalAllocatable map[string]int64
+}
+
+// Snapshot returns a summary of the current ledger state.
+func (l *NodeLedger) Snapshot() LedgerSnapshot {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	total := make(map[string]int64)
+	for _, n := range l.nodes {
+		for res, qty := range n.allocatable {
+			total[res] += qty
+		}
+	}
+
+	return LedgerSnapshot{
+		NodeCount:        len(l.nodes),
+		InflightCount:    len(l.inflight),
+		TotalAllocatable: total,
+	}
+}
+
 func (l *NodeLedger) findEntry(name string) *nodeEntry {
 	if n, ok := l.nodes[name]; ok {
 		return n

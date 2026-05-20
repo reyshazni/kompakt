@@ -5,7 +5,7 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: read
+  contents: write
   packages: write
   id-token: write  # for cosign keyless signing
 
@@ -69,3 +69,9 @@ jobs:
         run: |
           cosign attach sbom --sbom sbom.spdx.json \
             ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: sbom.spdx.json

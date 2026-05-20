@@ -173,6 +173,48 @@ func TestReconcile_NoOp_WhenNoGates(t *testing.T) {
 	}
 }
 
+func TestReconcile_StatusUpdated_AfterGateRelease(t *testing.T) {
+	pod := gatedPod("pod-1", 1000)
+	node := testNode("node-1", 4000)
+	profile := testProfile()
+
+	r, fc := setupReconciler(pod, node, profile)
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "pod-1", Namespace: "default"}}
+
+	if _, err := r.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	updated := &v1alpha1.PackingProfile{}
+	if err := fc.Get(context.Background(), client.ObjectKey{Name: "test-cpu"}, updated); err != nil {
+		t.Fatalf("failed to get profile: %v", err)
+	}
+	if updated.Status.ActiveGates != 0 {
+		t.Fatalf("expected 0 active gates after release, got %d", updated.Status.ActiveGates)
+	}
+}
+
+func TestReconcile_StatusUpdated_WhileStillGated(t *testing.T) {
+	pod := gatedPod("pod-1", 8000)
+	node := testNode("node-1", 2000)
+	profile := testProfile()
+
+	r, fc := setupReconciler(pod, node, profile)
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "pod-1", Namespace: "default"}}
+
+	if _, err := r.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	updated := &v1alpha1.PackingProfile{}
+	if err := fc.Get(context.Background(), client.ObjectKey{Name: "test-cpu"}, updated); err != nil {
+		t.Fatalf("failed to get profile: %v", err)
+	}
+	if updated.Status.ActiveGates != 1 {
+		t.Fatalf("expected 1 active gate, got %d", updated.Status.ActiveGates)
+	}
+}
+
 func TestReconcile_PriorityHigh_ReleasedImmediately(t *testing.T) {
 	pod := gatedPod("priority-pod", 1000)
 	pod.Annotations = map[string]string{annotationPriority: "high"}

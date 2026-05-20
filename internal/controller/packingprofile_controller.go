@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/tools/record"
@@ -16,12 +17,14 @@ import (
 	v1alpha1 "github.com/reyshazni/kompakt/api/v1alpha1"
 	"github.com/reyshazni/kompakt/internal/inflight"
 	"github.com/reyshazni/kompakt/internal/ledger"
+	kompaktmetrics "github.com/reyshazni/kompakt/internal/metrics"
 	"github.com/reyshazni/kompakt/internal/rules"
 )
 
 const (
 	labelProfile       = "packer.kompakt.io/packing-profile"
 	annotationPriority = "kompakt.io/priority"
+	annotationTraceID  = "kompakt.io/trace-id"
 	gatePrefix         = "kompakt.io/"
 )
 
@@ -59,30 +62,43 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, nil
 	}
 
+	// Enrich logger with trace context for all downstream log lines
+	traceID := pod.Annotations[annotationTraceID]
+	logger = logger.WithValues("traceID", traceID, "profile", profileName, "podUID", pod.UID)
+
 	// 4. Get PackingProfile
 	profile := &v1alpha1.PackingProfile{}
 	if err := r.Get(ctx, client.ObjectKey{Name: profileName}, profile); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("profile not found, releasing gates", "profile", profileName, "pod", pod.Name)
+			r.recordRelease(pod, profileName, "profile_not_found", "")
+			logger.Info("Gate released", "reason", "profile_not_found")
 			return ctrl.Result{}, r.releaseGates(ctx, pod)
 		}
 		return ctrl.Result{}, err
 	}
 
+	defer func() {
+		if err := r.updateProfileStatus(ctx, profile); err != nil {
+			logger.Error(err, "failed to update profile status")
+		}
+	}()
+
 	// 5. Sync ledger from cluster state
-	if err := r.syncLedger(ctx); err != nil {
+	if err := r.syncLedger(ctx, logger); err != nil {
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	// 6. Check priority override
 	if pod.Annotations[annotationPriority] == "high" {
-		logger.Info("priority=high, releasing gates immediately", "pod", pod.Name)
+		r.recordRelease(pod, profileName, "priority", "")
+		logger.Info("Gate released", "reason", "priority")
 		return ctrl.Result{}, r.releaseGates(ctx, pod)
 	}
 
 	// 7. Check reservation timeout
 	if isTimedOut(pod, profile) {
-		logger.Info("reservation timed out, releasing gates", "pod", pod.Name)
+		r.recordRelease(pod, profileName, "timeout", "")
+		logger.Info("Gate released", "reason", "timeout")
 		return ctrl.Result{}, r.releaseGates(ctx, pod)
 	}
 
@@ -94,12 +110,18 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		if !exists {
 			continue
 		}
+		evalStart := time.Now()
 		release, nodeName, err := rule.Evaluate(ctx, pod, r.Ledger, profile)
+		kompaktmetrics.RuleEvaluationDuration.WithLabelValues(ruleRef.Name).Observe(time.Since(evalStart).Seconds())
 		if err != nil {
+			kompaktmetrics.RuleEvaluationsTotal.WithLabelValues(ruleRef.Name, "error").Inc()
 			logger.Error(err, "rule evaluation failed", "rule", ruleRef.Name)
 			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
-		if !release {
+		if release {
+			kompaktmetrics.RuleEvaluationsTotal.WithLabelValues(ruleRef.Name, "release").Inc()
+		} else {
+			kompaktmetrics.RuleEvaluationsTotal.WithLabelValues(ruleRef.Name, "hold").Inc()
 			allRelease = false
 			break
 		}
@@ -113,12 +135,22 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	// 9. Release gates with optional node affinity
-	logger.Info("capacity available, releasing gates", "pod", pod.Name, "node", targetNode)
+	r.recordRelease(pod, profileName, "capacity", targetNode)
+	logger.Info("Gate released", "reason", "capacity", "node", targetNode)
 	if err := r.releaseGatesWithAffinity(ctx, pod, targetNode); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// recordRelease records metrics for a gate release event.
+func (r *PackingProfileReconciler) recordRelease(pod *corev1.Pod, profileName, reason, _ string) {
+	kompaktmetrics.GateReleasesTotal.WithLabelValues(profileName, reason).Inc()
+	kompaktmetrics.GatedPods.WithLabelValues(pod.Namespace, profileName).Dec()
+	if !pod.CreationTimestamp.IsZero() {
+		kompaktmetrics.GateHoldDuration.WithLabelValues(profileName, reason).Observe(time.Since(pod.CreationTimestamp.Time).Seconds())
+	}
 }
 
 // SetupWithManager registers the reconciler with the manager.
@@ -133,6 +165,24 @@ func (r *PackingProfileReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			return hasKompaktGates(pod)
 		})).
 		Complete(r)
+}
+
+func (r *PackingProfileReconciler) updateProfileStatus(ctx context.Context, profile *v1alpha1.PackingProfile) error {
+	podList := &corev1.PodList{}
+	if err := r.List(ctx, podList, client.MatchingLabels{labelProfile: profile.Name}); err != nil {
+		return err
+	}
+
+	var activeGates int32
+	for i := range podList.Items {
+		if hasKompaktGates(&podList.Items[i]) {
+			activeGates++
+		}
+	}
+
+	profile.Status.ActiveGates = activeGates
+	profile.Status.ActiveReservations = activeGates
+	return r.Status().Update(ctx, profile)
 }
 
 func hasKompaktGates(pod *corev1.Pod) bool {
@@ -186,7 +236,7 @@ func (r *PackingProfileReconciler) releaseGatesWithAffinity(ctx context.Context,
 	return r.Patch(ctx, pod, patch)
 }
 
-func (r *PackingProfileReconciler) syncLedger(ctx context.Context) error {
+func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.Logger) error {
 	// Sync existing nodes
 	nodeList := &corev1.NodeList{}
 	if err := r.List(ctx, nodeList); err != nil {
@@ -225,6 +275,12 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context) error {
 		r.Ledger.UpdateUsage(nodeName, used)
 	}
 
+	// Update ledger metrics
+	snapshot := r.Ledger.Snapshot()
+	kompaktmetrics.LedgerNodes.Set(float64(snapshot.NodeCount))
+	kompaktmetrics.LedgerAllocatableMillicores.Set(float64(snapshot.TotalAllocatable["cpu"]))
+	kompaktmetrics.LedgerAllocatableMemoryBytes.Set(float64(snapshot.TotalAllocatable["memory"]))
+
 	// Sync inflight nodes from detectors using a direct (uncached) reader
 	// to avoid triggering cluster-scoped list/watch on restricted resources.
 	reader := r.APIReader
@@ -234,11 +290,13 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context) error {
 	for _, d := range r.Detectors {
 		nodes, err := d.Detect(ctx, reader)
 		if err != nil {
+			logger.V(1).Info("Inflight detection failed", "detector", d.Name(), "error", err)
 			continue
 		}
 		for _, n := range nodes {
 			r.Ledger.AddInflightNode(n.Name, n.Allocatable)
 		}
+		kompaktmetrics.LedgerInflightNodes.WithLabelValues(d.Name()).Set(float64(len(nodes)))
 	}
 
 	return nil
