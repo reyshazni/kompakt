@@ -89,7 +89,7 @@ func main() {
 		log.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+	if err := mgr.AddReadyzCheck("readyz", certProvisioner.ReadyzCheck); err != nil {
 		log.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
