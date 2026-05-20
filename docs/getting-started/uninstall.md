@@ -30,10 +30,24 @@ helm uninstall kompakt -n kompakt-system
 kubectl delete namespace kompakt-system
 ```
 
-### From source
+### Kustomize
 
 ```bash
-make undeploy
+kubectl delete -k https://github.com/reyshazni/kompakt/config/default
+```
+
+### Plain kubectl
+
+```bash
+kubectl delete mutatingwebhookconfiguration kompakt-webhook
+kubectl delete -f https://raw.githubusercontent.com/reyshazni/kompakt/main/config/manager/manager.yaml
+kubectl delete -f https://raw.githubusercontent.com/reyshazni/kompakt/main/config/manager/service.yaml
+kubectl delete -f https://raw.githubusercontent.com/reyshazni/kompakt/main/config/rbac/role_binding.yaml
+kubectl delete -f https://raw.githubusercontent.com/reyshazni/kompakt/main/config/rbac/role.yaml
+kubectl delete -f https://raw.githubusercontent.com/reyshazni/kompakt/main/config/rbac/leader_election_role_binding.yaml
+kubectl delete -f https://raw.githubusercontent.com/reyshazni/kompakt/main/config/rbac/leader_election_role.yaml
+kubectl delete -f https://raw.githubusercontent.com/reyshazni/kompakt/main/config/rbac/service_account.yaml
+kubectl delete namespace kompakt-system
 ```
 
 ### Remove CRDs

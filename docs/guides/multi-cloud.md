@@ -28,7 +28,7 @@ You run Kubernetes clusters across multiple cloud providers and want consistent 
 Install Kompakt the same way on every cloud:
 
 ```bash
-helm install kompakt kompakt/kompakt -n kompakt-system --create-namespace
+helm install kompakt oci://ghcr.io/reyshazni/charts/kompakt -n kompakt-system --create-namespace
 ```
 
 No cloud-specific configuration needed. In-flight detection adapters are auto-detected based on what resources exist in the cluster.

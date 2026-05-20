@@ -43,9 +43,8 @@ When multiple unschedulable pods appear at the same time, the cluster autoscaler
 Requires Kubernetes >= 1.30 and Helm 3.
 
 ```bash
-helm repo add kompakt https://reyshazni.github.io/kompakt
-helm repo update
-helm install kompakt kompakt/kompakt -n kompakt-system --create-namespace
+helm install kompakt oci://ghcr.io/reyshazni/charts/kompakt \
+  -n kompakt-system --create-namespace
 ```
 
 Verify the installation:
