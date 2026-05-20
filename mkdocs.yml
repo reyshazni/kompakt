@@ -33,6 +33,8 @@ theme:
     - search.highlight
     - content.code.copy
     - content.action.edit
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
   icon:
     repo: fontawesome/brands/github
 
