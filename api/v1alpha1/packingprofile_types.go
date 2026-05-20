@@ -139,7 +139,9 @@ type PackingProfileStatus struct {
 // +kubebuilder:resource:scope=Cluster,shortName=pp
 // +kubebuilder:printcolumn:name="Demand",type=string,JSONPath=`.spec.demandSource.type`
 // +kubebuilder:printcolumn:name="Rules",type=string,JSONPath=`.spec.rules[*].name`
-// +kubebuilder:printcolumn:name="Active Gates",type=integer,JSONPath=`.status.activeGates`
+// +kubebuilder:printcolumn:name="Gates",type=integer,JSONPath=`.status.activeGates`
+// +kubebuilder:printcolumn:name="Inflight",type=integer,JSONPath=`.status.inflightNodes`
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // PackingProfile is the Schema for the packingprofiles API.

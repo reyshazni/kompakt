@@ -24,8 +24,14 @@ spec:
       name: Rules
       type: string
     - jsonPath: .status.activeGates
-      name: Active Gates
+      name: Gates
       type: integer
+    - jsonPath: .status.inflightNodes
+      name: Inflight
+      type: integer
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date

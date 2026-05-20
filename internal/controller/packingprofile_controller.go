@@ -198,6 +198,7 @@ func (r *PackingProfileReconciler) updateProfileStatus(ctx context.Context, prof
 	// Set conditions
 	setProfileValidCondition(profile)
 	setInflightDetectionCondition(profile, r.Ledger.Snapshot().InflightCount, r.Detectors)
+	setReadyCondition(profile)
 
 	return r.Status().Update(ctx, profile)
 }
@@ -330,6 +331,7 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 }
 
 const (
+	condReady                   = "Ready"
 	condProfileValid            = "ProfileValid"
 	condLedgerReady             = "LedgerReady"
 	condInflightDetectionActive = "InflightDetectionActive"
@@ -410,6 +412,34 @@ func setInflightDetectionCondition(profile *v1alpha1.PackingProfile, inflightCou
 	} else {
 		setCondition(profile, condInflightDetectionActive, metav1.ConditionFalse, "NoneDetected", "no inflight nodes detected")
 	}
+}
+
+func setReadyCondition(profile *v1alpha1.PackingProfile) {
+	profileValid := conditionIsTrue(profile, condProfileValid)
+	ledgerReady := conditionIsTrue(profile, condLedgerReady)
+
+	if profileValid && ledgerReady {
+		setCondition(profile, condReady, metav1.ConditionTrue, "Ready", "profile is valid and ledger is synced")
+		return
+	}
+
+	var reasons []string
+	if !profileValid {
+		reasons = append(reasons, "ProfileValid=False")
+	}
+	if !ledgerReady {
+		reasons = append(reasons, "LedgerReady=False")
+	}
+	setCondition(profile, condReady, metav1.ConditionFalse, "NotReady", strings.Join(reasons, ", "))
+}
+
+func conditionIsTrue(profile *v1alpha1.PackingProfile, condType string) bool {
+	for _, c := range profile.Status.Conditions {
+		if c.Type == condType {
+			return c.Status == metav1.ConditionTrue
+		}
+	}
+	return false
 }
 
 // warnProfileMisconfig logs warnings for common profile misconfiguration.
