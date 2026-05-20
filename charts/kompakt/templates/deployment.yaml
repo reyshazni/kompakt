@@ -62,13 +62,11 @@ spec:
               drop: [ALL]
             readOnlyRootFilesystem: true
           volumeMounts:
-            - name: webhook-certs
+            - name: cert-dir
               mountPath: /tmp/k8s-webhook-server/serving-certs
-              readOnly: true
       volumes:
-        - name: webhook-certs
-          secret:
-            secretName: {{ include "kompakt.fullname" . }}-webhook-certs
+        - name: cert-dir
+          emptyDir: {}
       terminationGracePeriodSeconds: 10
       {{- with .Values.nodeSelector }}
       nodeSelector:

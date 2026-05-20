@@ -33,6 +33,46 @@ func TestWebhookFunctional(t *testing.T) {
 	})
 }
 
+func TestCertProvisioner(t *testing.T) {
+	// Verify the cert provisioner created the webhook cert Secret
+	out, err := kubectl(
+		"-n", "kompakt-system",
+		"get", "secret", "kompakt-webhook-certs",
+		"-o", "jsonpath={.data.tls\\.crt}",
+	)
+	if err != nil {
+		t.Fatalf("cert secret not found: %s", out)
+	}
+	if out == "" {
+		t.Fatal("cert secret exists but tls.crt is empty")
+	}
+
+	// Verify CA cert is stored
+	out, err = kubectl(
+		"-n", "kompakt-system",
+		"get", "secret", "kompakt-webhook-certs",
+		"-o", "jsonpath={.data.ca\\.crt}",
+	)
+	if err != nil {
+		t.Fatalf("failed to read ca.crt from secret: %s", out)
+	}
+	if out == "" {
+		t.Fatal("ca.crt is empty in cert secret")
+	}
+
+	// Verify caBundle is set on the webhook configuration
+	out, err = kubectl(
+		"get", "mutatingwebhookconfiguration", "kompakt-webhook",
+		"-o", "jsonpath={.webhooks[0].clientConfig.caBundle}",
+	)
+	if err != nil {
+		t.Fatalf("failed to read webhook caBundle: %s", out)
+	}
+	if out == "" {
+		t.Fatal("caBundle is empty on webhook configuration")
+	}
+}
+
 func TestCRDInstalled(t *testing.T) {
 	out, err := kubectl("get", "crd", "packingprofiles.packer.kompakt.io")
 	if err != nil {

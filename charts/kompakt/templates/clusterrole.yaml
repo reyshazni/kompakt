@@ -24,6 +24,13 @@ rules:
     resources: [configmaps]
     resourceNames: [cluster-autoscaler-status]
     verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, create, update]
+  - apiGroups: [admissionregistration.k8s.io]
+    resources: [mutatingwebhookconfigurations]
+    resourceNames: [{{ include "kompakt.fullname" . }}]
+    verbs: [get, update, patch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
