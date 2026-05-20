@@ -107,7 +107,12 @@ func main() {
 
 	// Set up controller
 	nodeLedger := ledger.New()
-	detectors := []inflight.Detector{&inflight.ClusterAutoscalerDetector{}}
+	// Layer 1: autoscaler-aware (earliest signal), Layer 2: node-based (fallback)
+	detectors := []inflight.Detector{
+		&inflight.ClusterAutoscalerDetector{},
+		&inflight.GOATScalerDetector{},
+		&inflight.NotReadyNodeDetector{},
+	}
 	reconciler := &kompaktcontroller.PackingProfileReconciler{
 		Client:    mgr.GetClient(),
 		APIReader: mgr.GetAPIReader(),

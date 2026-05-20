@@ -348,6 +348,9 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 	if reader == nil {
 		reader = r.Client
 	}
+	// Deduplicate across detectors. Layer 1 (autoscaler-aware) runs first
+	// in the slice, so its richer data wins over Layer 2 (node-based).
+	seenInflight := make(map[string]bool)
 	for _, d := range r.Detectors {
 		nodes, err := d.Detect(ctx, reader)
 		if err != nil {
@@ -355,14 +358,21 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 			continue
 		}
 		for _, n := range nodes {
+			if seenInflight[n.Name] {
+				continue
+			}
+			seenInflight[n.Name] = true
+
 			alloc := n.Allocatable
 			if len(alloc) == 0 {
-				alloc = matchNodeGroupTemplate(n.Name, profile.Spec.CapacitySource.NodeGroupTemplates)
+				alloc = matchNodeGroupTemplate(n, profile.Spec.CapacitySource.NodeGroupTemplates)
 				if alloc != nil {
-					logger.V(1).Info("inflight node enriched from template", "node", n.Name, "allocatable", alloc)
+					logger.V(1).Info("inflight node enriched from template", "node", n.Name,
+						"detector", d.Name(), "instanceType", n.InstanceType, "allocatable", alloc)
 				} else {
 					logger.Info("inflight node has no matching template, capacity unknown",
-						"node", n.Name, "configuredPrefixes", templatePrefixes(profile.Spec.CapacitySource.NodeGroupTemplates))
+						"node", n.Name, "detector", d.Name(),
+						"configuredTemplates", templateIdentifiers(profile.Spec.CapacitySource.NodeGroupTemplates))
 				}
 			}
 			r.Ledger.AddInflightNode(n.Name, alloc)
@@ -513,28 +523,49 @@ func warnProfileMisconfig(logger logr.Logger, profile *v1alpha1.PackingProfile) 
 	}
 }
 
-func templatePrefixes(templates []v1alpha1.NodeGroupTemplate) []string {
-	prefixes := make([]string, len(templates))
+func templateIdentifiers(templates []v1alpha1.NodeGroupTemplate) []string {
+	ids := make([]string, len(templates))
 	for i, t := range templates {
-		prefixes[i] = t.NamePrefix
+		switch {
+		case t.InstanceType != "":
+			ids[i] = "instanceType=" + t.InstanceType
+		case t.NamePrefix != "":
+			ids[i] = "namePrefix=" + t.NamePrefix
+		default:
+			ids[i] = "<empty>"
+		}
 	}
-	return prefixes
+	return ids
 }
 
-// matchNodeGroupTemplate finds the first NodeGroupTemplate whose NamePrefix
-// matches the inflight node name and returns a copy of its allocatable map.
+// matchNodeGroupTemplate finds the first NodeGroupTemplate matching the
+// inflight node and returns a copy of its allocatable map.
+// Match priority: instanceType first, then namePrefix fallback.
 // Returns nil if no template matches.
-func matchNodeGroupTemplate(nodeName string, templates []v1alpha1.NodeGroupTemplate) map[string]int64 {
-	for _, t := range templates {
-		if strings.HasPrefix(nodeName, t.NamePrefix) {
-			alloc := make(map[string]int64, len(t.Allocatable))
-			for k, v := range t.Allocatable {
-				alloc[k] = v
+func matchNodeGroupTemplate(node inflight.InflightNode, templates []v1alpha1.NodeGroupTemplate) map[string]int64 {
+	// 1. Match by instance type (GOATScaler + NotReady path)
+	if node.InstanceType != "" {
+		for _, t := range templates {
+			if t.InstanceType != "" && t.InstanceType == node.InstanceType {
+				return copyTemplateAllocatable(t.Allocatable)
 			}
-			return alloc
+		}
+	}
+	// 2. Fallback to name prefix (CA path)
+	for _, t := range templates {
+		if t.NamePrefix != "" && strings.HasPrefix(node.Name, t.NamePrefix) {
+			return copyTemplateAllocatable(t.Allocatable)
 		}
 	}
 	return nil
+}
+
+func copyTemplateAllocatable(m map[string]int64) map[string]int64 {
+	alloc := make(map[string]int64, len(m))
+	for k, v := range m {
+		alloc[k] = v
+	}
+	return alloc
 }
 
 func isTimedOut(pod *corev1.Pod, profile *v1alpha1.PackingProfile, logger logr.Logger) bool {

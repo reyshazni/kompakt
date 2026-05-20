@@ -80,9 +80,12 @@ type CapacitySource struct {
 // actual allocatable is unknown until they arrive.
 type NodeGroupTemplate struct {
 	// NamePrefix is the node group name prefix to match against inflight node names.
-	// Must not be empty.
-	// +kubebuilder:validation:MinLength=1
-	NamePrefix string `json:"namePrefix"`
+	// Used by ClusterAutoscaler detector (CA status ConfigMap names).
+	NamePrefix string `json:"namePrefix,omitempty"`
+
+	// InstanceType is the cloud instance type to match against inflight nodes.
+	// Used by GOATScaler detector (event message) and NotReady detector (node label).
+	InstanceType string `json:"instanceType,omitempty"`
 
 	// Allocatable is the expected allocatable resources in millivalue.
 	// Must contain at least one resource entry.
