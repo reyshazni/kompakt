@@ -746,3 +746,187 @@ func TestReconcile_WaitForScaleUp_ReleaseWithAffinity(t *testing.T) {
 		t.Fatalf("expected affinity to cn-jakarta.172.16.1.10, got %s", terms[0].MatchExpressions[0].Values[0])
 	}
 }
+
+// --- Status condition tests ---
+
+func findCondition(profile *v1alpha1.PackingProfile, condType string) *metav1.Condition {
+	for i := range profile.Status.Conditions {
+		if profile.Status.Conditions[i].Type == condType {
+			return &profile.Status.Conditions[i]
+		}
+	}
+	return nil
+}
+
+func TestStatus_ProfileValid_True(t *testing.T) {
+	pod := gatedPod("pod-1", 1000)
+	node := testNode("node-1", 4000)
+	profile := testProfile()
+
+	r, fc := setupReconciler(pod, node, profile)
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "pod-1", Namespace: "default"}}
+	if _, err := r.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	updated := &v1alpha1.PackingProfile{}
+	if err := fc.Get(context.Background(), client.ObjectKey{Name: "test-cpu"}, updated); err != nil {
+		t.Fatalf("failed to get profile: %v", err)
+	}
+
+	cond := findCondition(updated, "ProfileValid")
+	if cond == nil {
+		t.Fatal("expected ProfileValid condition")
+	}
+	if cond.Status != metav1.ConditionTrue {
+		t.Fatalf("expected ProfileValid=True, got %s: %s", cond.Status, cond.Message)
+	}
+}
+
+func TestStatus_ProfileValid_False_MissingResources(t *testing.T) {
+	pod := gatedPod("pod-1", 1000)
+	node := testNode("node-1", 4000)
+	profile := testProfile()
+	profile.Spec.DemandSource.Resources = nil // empty resources with ResourceRequest type
+
+	r, fc := setupReconciler(pod, node, profile)
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "pod-1", Namespace: "default"}}
+	if _, err := r.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	updated := &v1alpha1.PackingProfile{}
+	if err := fc.Get(context.Background(), client.ObjectKey{Name: "test-cpu"}, updated); err != nil {
+		t.Fatalf("failed to get profile: %v", err)
+	}
+
+	cond := findCondition(updated, "ProfileValid")
+	if cond == nil {
+		t.Fatal("expected ProfileValid condition")
+	}
+	if cond.Status != metav1.ConditionFalse {
+		t.Fatalf("expected ProfileValid=False for empty resources, got %s", cond.Status)
+	}
+	if cond.Reason != "ConfigurationError" {
+		t.Fatalf("expected reason ConfigurationError, got %s", cond.Reason)
+	}
+}
+
+func TestStatus_ProfileValid_False_WaitForScaleUpNoTemplates(t *testing.T) {
+	pod := scaleUpGatedPod("pod-1", 1000)
+	profile := scaleUpProfile()
+	// WaitForScaleUp but no nodeGroupTemplates
+
+	r, fc := setupReconciler(pod, profile)
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "pod-1", Namespace: "default"}}
+	if _, err := r.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	updated := &v1alpha1.PackingProfile{}
+	if err := fc.Get(context.Background(), client.ObjectKey{Name: "test-scaleup"}, updated); err != nil {
+		t.Fatalf("failed to get profile: %v", err)
+	}
+
+	cond := findCondition(updated, "ProfileValid")
+	if cond == nil {
+		t.Fatal("expected ProfileValid condition")
+	}
+	if cond.Status != metav1.ConditionFalse {
+		t.Fatalf("expected ProfileValid=False for WaitForScaleUp without templates, got %s", cond.Status)
+	}
+}
+
+func TestStatus_LedgerReady_True(t *testing.T) {
+	pod := gatedPod("pod-1", 1000)
+	node := testNode("node-1", 4000)
+	profile := testProfile()
+
+	r, fc := setupReconciler(pod, node, profile)
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "pod-1", Namespace: "default"}}
+	if _, err := r.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	updated := &v1alpha1.PackingProfile{}
+	if err := fc.Get(context.Background(), client.ObjectKey{Name: "test-cpu"}, updated); err != nil {
+		t.Fatalf("failed to get profile: %v", err)
+	}
+
+	cond := findCondition(updated, "LedgerReady")
+	if cond == nil {
+		t.Fatal("expected LedgerReady condition")
+	}
+	if cond.Status != metav1.ConditionTrue {
+		t.Fatalf("expected LedgerReady=True, got %s: %s", cond.Status, cond.Message)
+	}
+}
+
+func TestStatus_InflightNodes_Count(t *testing.T) {
+	pod := scaleUpGatedPod("pod-1", 1000)
+	profile := scaleUpProfile()
+	profile.Spec.CapacitySource.NodeGroupTemplates = []v1alpha1.NodeGroupTemplate{
+		{NamePrefix: "pool-gpu", Allocatable: map[string]int64{"cpu": 4000}},
+	}
+
+	detector := &fakeDetector{
+		nodes: []inflight.InflightNode{
+			{Name: "pool-gpu-pending-0", Allocatable: map[string]int64{}},
+			{Name: "pool-gpu-pending-1", Allocatable: map[string]int64{}},
+		},
+	}
+
+	r, fc := setupReconciler(pod, profile)
+	r.Detectors = []inflight.Detector{detector}
+
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "pod-1", Namespace: "default"}}
+	if _, err := r.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	updated := &v1alpha1.PackingProfile{}
+	if err := fc.Get(context.Background(), client.ObjectKey{Name: "test-scaleup"}, updated); err != nil {
+		t.Fatalf("failed to get profile: %v", err)
+	}
+
+	if updated.Status.InflightNodes != 2 {
+		t.Fatalf("expected 2 inflight nodes in status, got %d", updated.Status.InflightNodes)
+	}
+
+	cond := findCondition(updated, "InflightDetectionActive")
+	if cond == nil {
+		t.Fatal("expected InflightDetectionActive condition")
+	}
+	if cond.Status != metav1.ConditionTrue {
+		t.Fatalf("expected InflightDetectionActive=True, got %s", cond.Status)
+	}
+}
+
+func TestStatus_InflightDetection_NoDetectors(t *testing.T) {
+	pod := gatedPod("pod-1", 1000)
+	node := testNode("node-1", 4000)
+	profile := testProfile()
+
+	r, fc := setupReconciler(pod, node, profile)
+	// Detectors is nil by default in setupReconciler
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "pod-1", Namespace: "default"}}
+	if _, err := r.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	updated := &v1alpha1.PackingProfile{}
+	if err := fc.Get(context.Background(), client.ObjectKey{Name: "test-cpu"}, updated); err != nil {
+		t.Fatalf("failed to get profile: %v", err)
+	}
+
+	cond := findCondition(updated, "InflightDetectionActive")
+	if cond == nil {
+		t.Fatal("expected InflightDetectionActive condition")
+	}
+	if cond.Status != metav1.ConditionFalse {
+		t.Fatalf("expected InflightDetectionActive=False with no detectors, got %s", cond.Status)
+	}
+	if cond.Reason != "NoDetectors" {
+		t.Fatalf("expected reason NoDetectors, got %s", cond.Reason)
+	}
+}
