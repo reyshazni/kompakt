@@ -930,3 +930,57 @@ func TestStatus_InflightDetection_NoDetectors(t *testing.T) {
 		t.Fatalf("expected reason NoDetectors, got %s", cond.Reason)
 	}
 }
+
+func TestStatus_Ready_True(t *testing.T) {
+	pod := gatedPod("pod-1", 1000)
+	node := testNode("node-1", 4000)
+	profile := testProfile()
+
+	r, fc := setupReconciler(pod, node, profile)
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "pod-1", Namespace: "default"}}
+	if _, err := r.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	updated := &v1alpha1.PackingProfile{}
+	if err := fc.Get(context.Background(), client.ObjectKey{Name: "test-cpu"}, updated); err != nil {
+		t.Fatalf("failed to get profile: %v", err)
+	}
+
+	cond := findCondition(updated, "Ready")
+	if cond == nil {
+		t.Fatal("expected Ready condition")
+	}
+	if cond.Status != metav1.ConditionTrue {
+		t.Fatalf("expected Ready=True, got %s: %s", cond.Status, cond.Message)
+	}
+}
+
+func TestStatus_Ready_False_WhenProfileInvalid(t *testing.T) {
+	pod := gatedPod("pod-1", 1000)
+	node := testNode("node-1", 4000)
+	profile := testProfile()
+	profile.Spec.DemandSource.Resources = nil // invalid: ResourceRequest with no resources
+
+	r, fc := setupReconciler(pod, node, profile)
+	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "pod-1", Namespace: "default"}}
+	if _, err := r.Reconcile(context.Background(), req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	updated := &v1alpha1.PackingProfile{}
+	if err := fc.Get(context.Background(), client.ObjectKey{Name: "test-cpu"}, updated); err != nil {
+		t.Fatalf("failed to get profile: %v", err)
+	}
+
+	ready := findCondition(updated, "Ready")
+	if ready == nil {
+		t.Fatal("expected Ready condition")
+	}
+	if ready.Status != metav1.ConditionFalse {
+		t.Fatalf("expected Ready=False when ProfileValid=False, got %s", ready.Status)
+	}
+	if ready.Reason != "NotReady" {
+		t.Fatalf("expected reason NotReady, got %s", ready.Reason)
+	}
+}
