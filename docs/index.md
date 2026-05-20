@@ -7,7 +7,6 @@ Kompakt is a Kubernetes admission-time coordinator that prevents cluster autosca
 - No custom scheduler
 - No privileged DaemonSets
 - No vendor lock-in
-- Works on EKS, GKE, AKS, ACK, and TKE
 
 ## The problem
 
