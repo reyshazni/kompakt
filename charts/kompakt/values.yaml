@@ -18,13 +18,15 @@ webhook:
   failurePolicy: Ignore
   timeoutSeconds: 5
 
+# Resource defaults target clusters with up to ~100 concurrent gated pods.
+# See docs/guides/resource-sizing.md for data-backed methodology.
 resources:
   requests:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 50m
+    memory: 64Mi
   limits:
     cpu: 500m
-    memory: 256Mi
+    memory: 128Mi
 
 nodeSelector: {}
 tolerations: []
