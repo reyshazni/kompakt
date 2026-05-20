@@ -350,40 +350,46 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 	if reader == nil {
 		reader = r.Client
 	}
-	// Deduplicate across detectors. Layer 1 (autoscaler-aware) runs first
-	// in the slice, so its richer data wins over Layer 2 (node-based).
-	seenInflight := make(map[string]bool)
+
+	// Priority chain: try Layer 1 detectors (autoscaler-aware) first.
+	// If any Layer 1 detector finds nodes, use it and skip the rest.
+	// If all Layer 1 detectors return empty, fall back to Layer 2 (not-ready-nodes).
 	r.activeDetectors = nil
+	var inflightNodes []inflight.InflightNode
+	var activeDetector string
+
 	for _, d := range r.Detectors {
 		nodes, err := d.Detect(ctx, reader)
 		if err != nil {
 			logger.V(1).Info("Inflight detection failed", "detector", d.Name(), "error", err)
 			continue
 		}
-		for _, n := range nodes {
-			if seenInflight[n.Name] {
-				continue
-			}
-			seenInflight[n.Name] = true
-
-			alloc := n.Allocatable
-			if len(alloc) == 0 {
-				alloc = matchNodeGroupTemplate(n, profile.Spec.CapacitySource.NodeGroupTemplates)
-				if alloc != nil {
-					logger.V(1).Info("inflight node enriched from template", "node", n.Name,
-						"detector", d.Name(), "instanceType", n.InstanceType, "allocatable", alloc)
-				} else {
-					logger.Info("inflight node has no matching template, capacity unknown",
-						"node", n.Name, "detector", d.Name(),
-						"configuredTemplates", templateIdentifiers(profile.Spec.CapacitySource.NodeGroupTemplates))
-				}
-			}
-			r.Ledger.AddInflightNode(n.Name, alloc)
-		}
-		if len(nodes) > 0 {
-			r.activeDetectors = append(r.activeDetectors, d.Name())
-		}
 		kompaktmetrics.LedgerInflightNodes.WithLabelValues(d.Name()).Set(float64(len(nodes)))
+		if len(nodes) > 0 {
+			inflightNodes = nodes
+			activeDetector = d.Name()
+			break
+		}
+	}
+
+	if activeDetector != "" {
+		r.activeDetectors = []string{activeDetector}
+	}
+
+	for _, n := range inflightNodes {
+		alloc := n.Allocatable
+		if len(alloc) == 0 {
+			alloc = matchNodeGroupTemplate(n, profile.Spec.CapacitySource.NodeGroupTemplates)
+			if alloc != nil {
+				logger.V(1).Info("inflight node enriched from template", "node", n.Name,
+					"detector", activeDetector, "instanceType", n.InstanceType, "allocatable", alloc)
+			} else {
+				logger.Info("inflight node has no matching template, capacity unknown",
+					"node", n.Name, "detector", activeDetector,
+					"configuredTemplates", templateIdentifiers(profile.Spec.CapacitySource.NodeGroupTemplates))
+			}
+		}
+		r.Ledger.AddInflightNode(n.Name, alloc)
 	}
 
 	return nil
