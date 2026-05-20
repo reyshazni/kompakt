@@ -181,8 +181,9 @@ Planned for future releases: `WaitForImagePrePull` (v0.2), `WaitForMIGProfile` (
 | Field | Type | Description |
 |---|---|---|
 | `activeGates` | int32 | Number of pods currently gated by this profile |
-| `activeReservations` | int32 | Number of capacity reservations currently held |
-| `conditions` | []metav1.Condition | Standard Kubernetes conditions |
+| `inflightNodes` | int32 | Number of in-flight nodes detected |
+| `activeDetectors` | []string | Which inflight detector found nodes (e.g., `["goatscaler"]`) |
+| `conditions` | []metav1.Condition | Standard Kubernetes conditions (Ready, ProfileValid, LedgerReady, InflightDetectionActive) |
 
 ## Pod labels and annotations
 
@@ -191,6 +192,10 @@ Planned for future releases: `WaitForImagePrePull` (v0.2), `WaitForMIGProfile` (
 | `packer.kompakt.io/packing-profile` | Label | References a PackingProfile by name. Required for opt-in. |
 | `kompakt.io/exclude` | Label | Set to `true` to skip gating entirely |
 | `kompakt.io/priority` | Annotation | Set to `high` to release gate immediately |
+| `kompakt.io/trace-id` | Annotation | Set by webhook. 8-char ID for log correlation. |
+| `kompakt.io/gate-reason` | Annotation | Set by controller on release. Values: `capacity`, `timeout`, `priority`, `profile_not_found`. |
+| `kompakt.io/target-node` | Annotation | Set by controller on release with node affinity. The real node hostname. |
+| `kompakt.io/held-by` | Annotation | Set by controller while gated. The rule name currently holding (e.g., `WaitForScaleUp`). Removed on release. |
 
 ## kubectl examples
 

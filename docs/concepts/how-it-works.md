@@ -110,14 +110,17 @@ NAME                 DEMAND            RULES                                    
 general-cpu-coord    ResourceRequest   ["BinPackOnInflightCapacity","WaitForScaleUp"]  3       2          True    1h
 ```
 
-**Profile conditions** (kubectl describe packingprofile):
+**Profile status** (kubectl describe packingprofile):
+
+- `activeDetectors`: which inflight detector is active (e.g., `goatscaler`, `cluster-autoscaler`, `not-ready-nodes`)
+- `inflightNodes`: number of in-flight nodes detected
 
 | Condition | Meaning |
 |---|---|
 | `Ready` | Profile is valid and ledger is synced |
 | `ProfileValid` | Configuration has no errors |
 | `LedgerReady` | Last cluster state sync succeeded |
-| `InflightDetectionActive` | In-flight nodes detected from autoscaler |
+| `InflightDetectionActive` | In-flight nodes detected, shows which detector |
 
 **Prometheus metrics**: Gate hold duration, release counts by reason, rule evaluation latency, ledger node counts. See [Metrics](../reference/metrics.md).
 
