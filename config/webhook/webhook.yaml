@@ -13,7 +13,7 @@ webhooks:
         port: 443
     failurePolicy: Ignore
     sideEffects: None
-    reinvocationPolicy: Never
+    reinvocationPolicy: IfNeeded
     timeoutSeconds: 5
     rules:
       - apiGroups: [""]

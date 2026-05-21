@@ -75,7 +75,7 @@ func TestGOATScaler_ParseMessage(t *testing.T) {
 }
 
 func TestGOATScaler_OldEventIgnored(t *testing.T) {
-	ev := goatscalerEvent("pod-old", "asa-old", "zone", "type", 15*time.Minute)
+	ev := goatscalerEvent("pod-old", "asa-old", "zone", "type", 20*time.Minute)
 	fc := fake.NewClientBuilder().WithScheme(eventsScheme()).WithObjects(ev).Build()
 	d := &GOATScalerDetector{}
 
