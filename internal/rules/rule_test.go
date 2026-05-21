@@ -43,7 +43,7 @@ func podWithCPU(name string, milliCPU int64) *corev1.Pod {
 
 func TestBinPack_CapacityAvailable(t *testing.T) {
 	l := ledger.New()
-	l.AddNode("node-1", map[string]int64{"cpu": 4000})
+	l.AddNode("node-1", map[string]int64{"cpu": 4000}, nil, nil)
 
 	rule := &BinPackOnInflightCapacity{}
 	release, nodeName, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
@@ -60,7 +60,7 @@ func TestBinPack_CapacityAvailable(t *testing.T) {
 
 func TestBinPack_NoCapacity(t *testing.T) {
 	l := ledger.New()
-	l.AddNode("node-1", map[string]int64{"cpu": 500})
+	l.AddNode("node-1", map[string]int64{"cpu": 500}, nil, nil)
 
 	rule := &BinPackOnInflightCapacity{}
 	release, _, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
@@ -75,7 +75,7 @@ func TestBinPack_NoCapacity(t *testing.T) {
 func TestBinPack_InflightCapacity_Ignored(t *testing.T) {
 	// BinPack should only consider existing nodes, not inflight.
 	l := ledger.New()
-	l.AddInflightNode("inflight-1", map[string]int64{"cpu": 4000})
+	l.AddInflightNode("inflight-1", map[string]int64{"cpu": 4000}, nil, nil)
 
 	rule := &BinPackOnInflightCapacity{}
 	release, _, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
@@ -90,8 +90,8 @@ func TestBinPack_InflightCapacity_Ignored(t *testing.T) {
 func TestBinPack_IgnoresInflight_WhenExistingAlsoFits(t *testing.T) {
 	// Both existing and inflight can fit. BinPack should only use existing.
 	l := ledger.New()
-	l.AddNode("existing", map[string]int64{"cpu": 8000})
-	l.AddInflightNode("inflight", map[string]int64{"cpu": 2000})
+	l.AddNode("existing", map[string]int64{"cpu": 8000}, nil, nil)
+	l.AddInflightNode("inflight", map[string]int64{"cpu": 2000}, nil, nil)
 
 	rule := &BinPackOnInflightCapacity{}
 	release, nodeName, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
@@ -108,7 +108,7 @@ func TestBinPack_IgnoresInflight_WhenExistingAlsoFits(t *testing.T) {
 
 func TestBinPack_AnnotationDemand(t *testing.T) {
 	l := ledger.New()
-	l.AddNode("gpu-node", map[string]int64{"aliyun.com/gpu-mem": 16384})
+	l.AddNode("gpu-node", map[string]int64{"aliyun.com/gpu-mem": 16384}, nil, nil)
 
 	profile := &v1alpha1.PackingProfile{
 		Spec: v1alpha1.PackingProfileSpec{
@@ -203,7 +203,7 @@ func TestBinPack_EmptyDemand_ReleasesImmediately(t *testing.T) {
 func TestBinPack_ReservationSideEffect(t *testing.T) {
 	// Evaluate should reserve capacity so subsequent calls see reduced availability
 	l := ledger.New()
-	l.AddNode("node-1", map[string]int64{"cpu": 3000})
+	l.AddNode("node-1", map[string]int64{"cpu": 3000}, nil, nil)
 
 	rule := &BinPackOnInflightCapacity{}
 	profile := cpuProfile()
@@ -226,7 +226,7 @@ func TestBinPack_ReservationSideEffect(t *testing.T) {
 
 func TestBinPack_MultiContainer_SumsDemand(t *testing.T) {
 	l := ledger.New()
-	l.AddNode("node-1", map[string]int64{"cpu": 4000})
+	l.AddNode("node-1", map[string]int64{"cpu": 4000}, nil, nil)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "multi", Namespace: "default"},
@@ -265,7 +265,7 @@ func TestBinPack_MultiContainer_SumsDemand(t *testing.T) {
 
 func TestBinPack_MultiContainer_ExceedsCapacity(t *testing.T) {
 	l := ledger.New()
-	l.AddNode("node-1", map[string]int64{"cpu": 4000})
+	l.AddNode("node-1", map[string]int64{"cpu": 4000}, nil, nil)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "big-multi", Namespace: "default"},
@@ -388,7 +388,7 @@ func TestBinPack_InflightEmptyAllocatable_NoFit(t *testing.T) {
 	// Simulates the real-world bug: detector creates inflight nodes with
 	// empty allocatable, so bin-packing should not find a fit.
 	l := ledger.New()
-	l.AddInflightNode("inflight-1", map[string]int64{})
+	l.AddInflightNode("inflight-1", map[string]int64{}, nil, nil)
 
 	rule := &BinPackOnInflightCapacity{}
 	release, _, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())

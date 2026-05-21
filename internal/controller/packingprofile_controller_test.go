@@ -383,7 +383,7 @@ func TestReconcile_BinPack_IgnoresInflightNode(t *testing.T) {
 	profile := testProfile()
 
 	r, fc := setupReconciler(pod, profile)
-	r.Ledger.AddInflightNode("inflight-gpu-pool-0", map[string]int64{"cpu": 4000})
+	r.Ledger.AddInflightNode("inflight-gpu-pool-0", map[string]int64{"cpu": 4000}, nil, nil)
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "inflight-pod", Namespace: "default"}}
 

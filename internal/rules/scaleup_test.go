@@ -30,7 +30,7 @@ func TestWaitForScaleUp_NoCapacity_Passthrough(t *testing.T) {
 func TestWaitForScaleUp_InflightFits_Hold(t *testing.T) {
 	// Inflight node can fit the pod. Hold the gate to prevent redundant scale-up.
 	l := ledger.New()
-	l.AddInflightNode("pool-gpu-pending-0", map[string]int64{"cpu": 4000})
+	l.AddInflightNode("pool-gpu-pending-0", map[string]int64{"cpu": 4000}, nil, nil)
 
 	rule := &WaitForScaleUp{}
 	release, _, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
@@ -45,7 +45,7 @@ func TestWaitForScaleUp_InflightFits_Hold(t *testing.T) {
 func TestWaitForScaleUp_ExistingFits_Release(t *testing.T) {
 	// Existing node has capacity. Release with real node name for affinity.
 	l := ledger.New()
-	l.AddNode("cn-jakarta.172.16.1.10", map[string]int64{"cpu": 4000})
+	l.AddNode("cn-jakarta.172.16.1.10", map[string]int64{"cpu": 4000}, nil, nil)
 
 	rule := &WaitForScaleUp{}
 	release, nodeName, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
@@ -88,7 +88,7 @@ func TestWaitForScaleUp_ReservationOnInflight(t *testing.T) {
 	// After holding for an inflight node, capacity should be reserved.
 	// Second pod with same demand should see reduced capacity.
 	l := ledger.New()
-	l.AddInflightNode("pool-gpu-pending-0", map[string]int64{"cpu": 3000})
+	l.AddInflightNode("pool-gpu-pending-0", map[string]int64{"cpu": 3000}, nil, nil)
 
 	rule := &WaitForScaleUp{}
 	profile := cpuProfile()
@@ -115,7 +115,7 @@ func TestWaitForScaleUp_ReservationOnInflight(t *testing.T) {
 func TestWaitForScaleUp_ReservationOnExisting(t *testing.T) {
 	// Release on existing node should also reserve capacity.
 	l := ledger.New()
-	l.AddNode("node-1", map[string]int64{"cpu": 3000})
+	l.AddNode("node-1", map[string]int64{"cpu": 3000}, nil, nil)
 
 	rule := &WaitForScaleUp{}
 	profile := cpuProfile()
@@ -139,8 +139,8 @@ func TestWaitForScaleUp_ReservationOnExisting(t *testing.T) {
 func TestWaitForScaleUp_ExistingPreferredOverInflight(t *testing.T) {
 	// When both existing and inflight fit with same slack, prefer existing (release > hold).
 	l := ledger.New()
-	l.AddNode("existing", map[string]int64{"cpu": 2000})
-	l.AddInflightNode("inflight", map[string]int64{"cpu": 2000})
+	l.AddNode("existing", map[string]int64{"cpu": 2000}, nil, nil)
+	l.AddInflightNode("inflight", map[string]int64{"cpu": 2000}, nil, nil)
 
 	rule := &WaitForScaleUp{}
 	release, nodeName, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
