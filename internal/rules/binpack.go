@@ -36,7 +36,8 @@ func (r *BinPackOnInflightCapacity) Evaluate(
 		return true, "", nil
 	}
 
-	nodeName, err := l.FindFitExisting(demand)
+	constraints := extractConstraints(pod)
+	nodeName, err := l.FindFitExisting(demand, constraints)
 	if err != nil {
 		return false, "", nil
 	}

@@ -300,6 +300,11 @@ func (r *PackingProfileReconciler) annotatePod(ctx context.Context, pod *corev1.
 }
 
 func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.Logger, profile *v1alpha1.PackingProfile) error {
+	// Snapshot reservations before rebuild so they survive across cycles
+	reservations := r.Ledger.SnapshotReservations()
+	r.Ledger.ClearNodes()
+	r.Ledger.ClearInflight()
+
 	// Sync existing nodes
 	nodeList := &corev1.NodeList{}
 	if err := r.List(ctx, nodeList); err != nil {
@@ -311,7 +316,13 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 		for res, qty := range node.Status.Allocatable {
 			alloc[string(res)] = qty.MilliValue()
 		}
-		r.Ledger.AddNode(node.Name, alloc)
+		r.Ledger.AddNode(node.Name, alloc, node.Labels, node.Spec.Taints)
+
+		// Transition tracking: if this node was previously inflight
+		// (GOATScaler provision-task-id links event name to real node)
+		if taskID := node.Labels["goatscaler.io/provision-task-id"]; taskID != "" {
+			r.Ledger.RemoveInflightNode(taskID)
+		}
 	}
 
 	// Sync pod usage per node
@@ -322,7 +333,10 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 	usage := make(map[string]map[string]int64)
 	for i := range podList.Items {
 		p := &podList.Items[i]
-		if p.Spec.NodeName == "" || p.Status.Phase != corev1.PodRunning {
+		if p.Spec.NodeName == "" {
+			continue
+		}
+		if p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed {
 			continue
 		}
 		if usage[p.Spec.NodeName] == nil {
@@ -389,8 +403,11 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 					"configuredTemplates", templateIdentifiers(profile.Spec.CapacitySource.NodeGroupTemplates))
 			}
 		}
-		r.Ledger.AddInflightNode(n.Name, alloc)
+		r.Ledger.AddInflightNode(n.Name, alloc, n.Labels, nil)
 	}
+
+	// Restore reservations from previous cycle onto rebuilt entries
+	r.Ledger.RestoreReservations(reservations)
 
 	return nil
 }

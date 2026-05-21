@@ -4,6 +4,8 @@ import (
 	"errors"
 	"math"
 	"sync"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 var errNoFit = errors.New("no node with sufficient capacity")
@@ -12,6 +14,15 @@ type nodeEntry struct {
 	allocatable map[string]int64
 	used        map[string]int64
 	reserved    map[string]int64
+	labels      map[string]string
+	taints      []corev1.Taint
+}
+
+// PodSchedulingConstraints holds the subset of pod scheduling constraints
+// that Kompakt checks during fit evaluation.
+type PodSchedulingConstraints struct {
+	Tolerations  []corev1.Toleration
+	NodeSelector map[string]string
 }
 
 func (n *nodeEntry) available(resource string) int64 {
@@ -33,14 +44,64 @@ func New() *NodeLedger {
 	}
 }
 
-// AddNode registers an existing node with its allocatable resources.
-func (l *NodeLedger) AddNode(name string, allocatable map[string]int64) {
+// AddNode registers an existing node with its allocatable resources, labels, and taints.
+func (l *NodeLedger) AddNode(name string, allocatable map[string]int64, labels map[string]string, taints []corev1.Taint) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.nodes[name] = &nodeEntry{
 		allocatable: copyMap(allocatable),
 		used:        make(map[string]int64),
 		reserved:    make(map[string]int64),
+		labels:      copyStringMap(labels),
+		taints:      taints,
+	}
+}
+
+// ClearNodes removes all existing nodes from the ledger.
+func (l *NodeLedger) ClearNodes() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.nodes = make(map[string]*nodeEntry)
+}
+
+// ClearInflight removes all in-flight nodes from the ledger.
+func (l *NodeLedger) ClearInflight() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.inflight = make(map[string]*nodeEntry)
+}
+
+// SnapshotReservations returns a copy of all current reservations
+// keyed by node name. Used to preserve reservations across ledger rebuilds.
+func (l *NodeLedger) SnapshotReservations() map[string]map[string]int64 {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	snap := make(map[string]map[string]int64)
+	for name, n := range l.nodes {
+		if len(n.reserved) > 0 {
+			snap[name] = copyMap(n.reserved)
+		}
+	}
+	for name, n := range l.inflight {
+		if len(n.reserved) > 0 {
+			snap[name] = copyMap(n.reserved)
+		}
+	}
+	return snap
+}
+
+// RestoreReservations re-applies previously snapshotted reservations.
+// Reservations for nodes that no longer exist in the ledger are silently dropped.
+func (l *NodeLedger) RestoreReservations(snap map[string]map[string]int64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for name, reserved := range snap {
+		if n, ok := l.nodes[name]; ok {
+			n.reserved = copyMap(reserved)
+		}
+		if n, ok := l.inflight[name]; ok {
+			n.reserved = copyMap(reserved)
+		}
 	}
 }
 
@@ -61,13 +122,15 @@ func (l *NodeLedger) UpdateUsage(name string, used map[string]int64) {
 }
 
 // AddInflightNode registers a node that is being provisioned.
-func (l *NodeLedger) AddInflightNode(name string, allocatable map[string]int64) {
+func (l *NodeLedger) AddInflightNode(name string, allocatable map[string]int64, labels map[string]string, taints []corev1.Taint) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.inflight[name] = &nodeEntry{
 		allocatable: copyMap(allocatable),
 		used:        make(map[string]int64),
 		reserved:    make(map[string]int64),
+		labels:      copyStringMap(labels),
+		taints:      taints,
 	}
 }
 
@@ -121,7 +184,8 @@ func (l *NodeLedger) ReleaseReservation(nodeName string, demand map[string]int64
 // unreserved capacity (BestFit). Considers both existing and in-flight nodes.
 // isInflight indicates whether the match came from an in-flight node.
 // When existing and in-flight nodes have equal slack, existing is preferred.
-func (l *NodeLedger) FindFit(demand map[string]int64) (name string, isInflight bool, err error) {
+// If constraints is non-nil, nodes must also satisfy taints/tolerations and nodeSelector.
+func (l *NodeLedger) FindFit(demand map[string]int64, constraints *PodSchedulingConstraints) (name string, isInflight bool, err error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
@@ -130,6 +194,10 @@ func (l *NodeLedger) FindFit(demand map[string]int64) (name string, isInflight b
 	bestInflight := false
 
 	check := func(nodeName string, n *nodeEntry, inflight bool) {
+		// Check scheduling constraints (taints, nodeSelector)
+		if !nodeMatchesConstraints(n, constraints) {
+			return
+		}
 		fits := true
 		var totalSlack int64
 		for res, qty := range demand {
@@ -167,7 +235,7 @@ func (l *NodeLedger) FindFit(demand map[string]int64) (name string, isInflight b
 // FindFitExisting returns the name of the existing node with the smallest
 // sufficient unreserved capacity (BestFit). Only considers existing nodes,
 // not in-flight nodes.
-func (l *NodeLedger) FindFitExisting(demand map[string]int64) (string, error) {
+func (l *NodeLedger) FindFitExisting(demand map[string]int64, constraints *PodSchedulingConstraints) (string, error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
@@ -175,6 +243,9 @@ func (l *NodeLedger) FindFitExisting(demand map[string]int64) (string, error) {
 	bestSlack := int64(math.MaxInt64)
 
 	for name, n := range l.nodes {
+		if !nodeMatchesConstraints(n, constraints) {
+			continue
+		}
 		fits := true
 		var totalSlack int64
 		for res, qty := range demand {
@@ -239,4 +310,54 @@ func copyMap(m map[string]int64) map[string]int64 {
 		c[k] = v
 	}
 	return c
+}
+
+func copyStringMap(m map[string]string) map[string]string {
+	if m == nil {
+		return nil
+	}
+	c := make(map[string]string, len(m))
+	for k, v := range m {
+		c[k] = v
+	}
+	return c
+}
+
+// nodeMatchesConstraints checks taints/tolerations and nodeSelector.
+func nodeMatchesConstraints(n *nodeEntry, constraints *PodSchedulingConstraints) bool {
+	if constraints == nil {
+		return true
+	}
+	// Check taints: every NoSchedule/NoExecute taint must be tolerated
+	for _, taint := range n.taints {
+		if taint.Effect != corev1.TaintEffectNoSchedule && taint.Effect != corev1.TaintEffectNoExecute {
+			continue
+		}
+		if !toleratesTaint(constraints.Tolerations, taint) {
+			return false
+		}
+	}
+	// Check nodeSelector: all selector labels must exist on node
+	for key, val := range constraints.NodeSelector {
+		if n.labels[key] != val {
+			return false
+		}
+	}
+	return true
+}
+
+func toleratesTaint(tolerations []corev1.Toleration, taint corev1.Taint) bool {
+	for _, t := range tolerations {
+		if t.Operator == corev1.TolerationOpExists && (t.Key == "" || t.Key == taint.Key) {
+			if t.Effect == "" || t.Effect == taint.Effect {
+				return true
+			}
+		}
+		if t.Key == taint.Key && t.Value == taint.Value {
+			if t.Effect == "" || t.Effect == taint.Effect {
+				return true
+			}
+		}
+	}
+	return false
 }

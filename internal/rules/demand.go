@@ -6,7 +6,16 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	v1alpha1 "github.com/reyshazni/kompakt/api/v1alpha1"
+	"github.com/reyshazni/kompakt/internal/ledger"
 )
+
+// extractConstraints builds scheduling constraints from the pod spec.
+func extractConstraints(pod *corev1.Pod) *ledger.PodSchedulingConstraints {
+	return &ledger.PodSchedulingConstraints{
+		Tolerations:  pod.Spec.Tolerations,
+		NodeSelector: pod.Spec.NodeSelector,
+	}
+}
 
 // ExtractDemand reads resource demand from a pod based on the profile's demandSource.
 func ExtractDemand(pod *corev1.Pod, source v1alpha1.DemandSource) map[string]int64 {

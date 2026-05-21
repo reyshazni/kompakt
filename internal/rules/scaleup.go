@@ -39,7 +39,8 @@ func (r *WaitForScaleUp) Evaluate(
 		return true, "", nil
 	}
 
-	nodeName, isInflight, err := l.FindFit(demand)
+	constraints := extractConstraints(pod)
+	nodeName, isInflight, err := l.FindFit(demand, constraints)
 	if err != nil {
 		// No capacity anywhere -- release to trigger autoscaler
 		return true, "", nil
