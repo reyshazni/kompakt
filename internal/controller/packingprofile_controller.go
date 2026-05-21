@@ -188,6 +188,9 @@ func (r *PackingProfileReconciler) recordHold(pod *corev1.Pod, profileName, rule
 }
 
 // SetupWithManager registers the reconciler with the manager.
+// WARNING: Do not set MaxConcurrentReconciles > 1. The ledger is rebuilt
+// each reconcile cycle and concurrent reconciles would interleave
+// destructively (syncLedger + FindFit + Reserve is not atomic).
 func (r *PackingProfileReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Pod{}).
@@ -321,6 +324,10 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 	}
 	for i := range nodeList.Items {
 		node := &nodeList.Items[i]
+		// Skip nodes being deleted (scale-down race guard)
+		if node.DeletionTimestamp != nil {
+			continue
+		}
 		alloc := make(map[string]int64)
 		for res, qty := range node.Status.Allocatable {
 			alloc[string(res)] = qty.MilliValue()

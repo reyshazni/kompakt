@@ -14,6 +14,11 @@ const (
 	// "never been Ready" (newly provisioning).
 	neverReadyThreshold = 10 * time.Second
 
+	// maxNotReadyAge is the maximum time a node can be NotReady before
+	// we stop considering it as "provisioning" and assume it's stuck.
+	// Prevents phantom capacity from failed provisions.
+	maxNotReadyAge = 15 * time.Minute
+
 	instanceTypeLabel = "node.kubernetes.io/instance-type"
 )
 
@@ -39,6 +44,10 @@ func (d *NotReadyNodeDetector) Detect(ctx context.Context, reader client.Reader)
 		node := &nodeList.Items[i]
 
 		if !isNeverReady(node) {
+			continue
+		}
+		// Skip nodes that have been NotReady too long (likely stuck, not provisioning)
+		if time.Since(node.CreationTimestamp.Time) > maxNotReadyAge {
 			continue
 		}
 
