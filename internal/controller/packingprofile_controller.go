@@ -263,24 +263,33 @@ func (r *PackingProfileReconciler) releaseGatesWithAffinity(ctx context.Context,
 
 	// Add node affinity if we have a target
 	if nodeName != "" {
+		hostnameReq := corev1.NodeSelectorRequirement{
+			Key:      "kubernetes.io/hostname",
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   []string{nodeName},
+		}
+
 		if pod.Spec.Affinity == nil {
 			pod.Spec.Affinity = &corev1.Affinity{}
 		}
 		if pod.Spec.Affinity.NodeAffinity == nil {
 			pod.Spec.Affinity.NodeAffinity = &corev1.NodeAffinity{}
 		}
-		pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = &corev1.NodeSelector{
-			NodeSelectorTerms: []corev1.NodeSelectorTerm{
-				{
-					MatchExpressions: []corev1.NodeSelectorRequirement{
-						{
-							Key:      "kubernetes.io/hostname",
-							Operator: corev1.NodeSelectorOpIn,
-							Values:   []string{nodeName},
-						},
-					},
+
+		existing := pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+		if existing != nil && len(existing.NodeSelectorTerms) > 0 {
+			// Merge: add hostname match to each existing term (AND logic)
+			for i := range existing.NodeSelectorTerms {
+				existing.NodeSelectorTerms[i].MatchExpressions = append(
+					existing.NodeSelectorTerms[i].MatchExpressions, hostnameReq)
+			}
+		} else {
+			// No existing affinity: create new
+			pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = &corev1.NodeSelector{
+				NodeSelectorTerms: []corev1.NodeSelectorTerm{
+					{MatchExpressions: []corev1.NodeSelectorRequirement{hostnameReq}},
 				},
-			},
+			}
 		}
 	}
 

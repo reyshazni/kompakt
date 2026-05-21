@@ -13,7 +13,10 @@ import (
 const (
 	goatscalerComponent = "GOATScaler"
 	provisionNodeReason = "ProvisionNode"
-	eventMaxAge         = 10 * time.Minute
+	// DefaultEventMaxAge is the max age for GOATScaler events to be considered.
+	// GPU nodes can take 5+ minutes to provision, and under ECS stock shortage
+	// this can extend further. 15 minutes covers most cases.
+	DefaultEventMaxAge = 15 * time.Minute
 )
 
 var provisionNodeRegex = regexp.MustCompile(
@@ -23,7 +26,10 @@ var provisionNodeRegex = regexp.MustCompile(
 // GOATScalerDetector detects in-flight nodes from ACK GOATScaler ProvisionNode
 // pod events. This is the earliest signal that a scale-up is happening on ACK,
 // firing before the ECS API call and before the Node object exists.
-type GOATScalerDetector struct{}
+type GOATScalerDetector struct {
+	// EventMaxAge overrides the max age for events. Zero means use DefaultEventMaxAge.
+	EventMaxAge time.Duration
+}
 
 // Name returns the detector name.
 func (d *GOATScalerDetector) Name() string {
@@ -33,11 +39,22 @@ func (d *GOATScalerDetector) Name() string {
 // Detect lists ProvisionNode events from GOATScaler and parses node info.
 func (d *GOATScalerDetector) Detect(ctx context.Context, reader client.Reader) ([]InflightNode, error) {
 	eventList := &corev1.EventList{}
-	if err := reader.List(ctx, eventList); err != nil {
-		return nil, nil //nolint:nilerr // can't list events = no inflight nodes
+	if err := reader.List(ctx, eventList, client.MatchingFields{
+		"reason": provisionNodeReason,
+	}); err != nil {
+		// Field selector might not be supported on uncached reader.
+		// Fall back to unfiltered list.
+		eventList = &corev1.EventList{}
+		if err := reader.List(ctx, eventList); err != nil {
+			return nil, nil //nolint:nilerr // can't list events = no inflight nodes
+		}
 	}
 
-	cutoff := time.Now().Add(-eventMaxAge)
+	maxAge := d.EventMaxAge
+	if maxAge == 0 {
+		maxAge = DefaultEventMaxAge
+	}
+	cutoff := time.Now().Add(-maxAge)
 	seen := make(map[string]bool)
 	var nodes []InflightNode
 

@@ -15,7 +15,7 @@ webhooks:
           port: 443
       failurePolicy: {{ .Values.webhook.failurePolicy }}
       sideEffects: None
-      reinvocationPolicy: Never
+      reinvocationPolicy: IfNeeded
       timeoutSeconds: {{ .Values.webhook.timeoutSeconds }}
       rules:
         - apiGroups: [""]
