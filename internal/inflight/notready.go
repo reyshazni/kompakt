@@ -71,6 +71,7 @@ func (d *NotReadyNodeDetector) Detect(ctx context.Context, reader client.Reader)
 			Allocatable:  alloc,
 			Labels:       labels,
 			InstanceType: instanceType,
+			DetectedAt:   node.CreationTimestamp.Time,
 		})
 	}
 

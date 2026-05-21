@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -11,8 +12,10 @@ import (
 )
 
 const (
-	goatscalerComponent = "GOATScaler"
-	provisionNodeReason = "ProvisionNode"
+	goatscalerComponent     = "GOATScaler"
+	provisionNodeReason     = "ProvisionNode"
+	notTriggerScaleUpReason = "NotTriggerScaleUp"
+	noStockSignal           = "NodePool NoStock"
 	// DefaultEventMaxAge is the max age for GOATScaler events to be considered.
 	// GPU nodes can take 5+ minutes to provision, and under ECS stock shortage
 	// this can extend further. 15 minutes covers most cases.
@@ -29,6 +32,9 @@ var provisionNodeRegex = regexp.MustCompile(
 type GOATScalerDetector struct {
 	// EventMaxAge overrides the max age for events. Zero means use DefaultEventMaxAge.
 	EventMaxAge time.Duration
+	// NoStockDetected is set to true after Detect() if any recent NotTriggerScaleUp
+	// events with "NodePool NoStock" were found. Used by the controller for logging.
+	NoStockDetected bool
 }
 
 // Name returns the detector name.
@@ -57,6 +63,7 @@ func (d *GOATScalerDetector) Detect(ctx context.Context, reader client.Reader) (
 	cutoff := time.Now().Add(-maxAge)
 	seen := make(map[string]bool)
 	var nodes []InflightNode
+	d.NoStockDetected = false
 
 	for i := range eventList.Items {
 		ev := &eventList.Items[i]
@@ -64,16 +71,22 @@ func (d *GOATScalerDetector) Detect(ctx context.Context, reader client.Reader) (
 		if ev.Source.Component != goatscalerComponent {
 			continue
 		}
-		if ev.Reason != provisionNodeReason {
-			continue
-		}
 
-		// Filter old events
 		evTime := ev.LastTimestamp.Time
 		if evTime.IsZero() {
 			evTime = ev.CreationTimestamp.Time
 		}
 		if evTime.Before(cutoff) {
+			continue
+		}
+
+		// Track NoStock signals
+		if ev.Reason == notTriggerScaleUpReason && strings.Contains(ev.Message, noStockSignal) {
+			d.NoStockDetected = true
+			continue
+		}
+
+		if ev.Reason != provisionNodeReason {
 			continue
 		}
 
@@ -91,6 +104,7 @@ func (d *GOATScalerDetector) Detect(ctx context.Context, reader client.Reader) (
 			Name:         nodeName,
 			Allocatable:  map[string]int64{},
 			InstanceType: instanceType,
+			DetectedAt:   evTime,
 		})
 	}
 

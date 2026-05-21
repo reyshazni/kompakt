@@ -3,6 +3,7 @@ package ledger
 import (
 	"errors"
 	"math"
+	"strings"
 	"sync"
 
 	corev1 "k8s.io/api/core/v1"
@@ -69,6 +70,19 @@ func (l *NodeLedger) ClearInflight() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.inflight = make(map[string]*nodeEntry)
+}
+
+// ClearInflightByPrefix removes in-flight nodes whose name starts with the
+// given prefix. Used for per-profile isolation: each profile clears only its
+// own inflight entries (prefixed with "profileName/").
+func (l *NodeLedger) ClearInflightByPrefix(prefix string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for name := range l.inflight {
+		if strings.HasPrefix(name, prefix) {
+			delete(l.inflight, name)
+		}
+	}
 }
 
 // SnapshotReservations returns a copy of all current reservations

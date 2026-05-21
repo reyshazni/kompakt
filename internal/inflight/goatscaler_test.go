@@ -147,3 +147,89 @@ func TestGOATScaler_Name(t *testing.T) {
 		t.Fatalf("expected 'goatscaler', got %s", d.Name())
 	}
 }
+
+func noStockEvent(podName string) *corev1.Event {
+	return &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("nostock-%s", podName),
+			Namespace: "default",
+		},
+		InvolvedObject: corev1.ObjectReference{
+			APIVersion: "v1", Kind: "Pod", Name: podName, Namespace: "default",
+		},
+		Reason:        "NotTriggerScaleUp",
+		Message:       "pod didn't trigger scale-up due to missing matching nodepool: 7 NodePool NoStock",
+		Source:        corev1.EventSource{Component: "GOATScaler"},
+		Type:          corev1.EventTypeNormal,
+		LastTimestamp: metav1.NewTime(time.Now()),
+	}
+}
+
+func TestGOATScaler_NoStock_SuppressesInflight(t *testing.T) {
+	// ProvisionNode event exists, but NoStock event also exists for the same pod.
+	// When NoStock is present, the inflight node should be suppressed.
+	provision := goatscalerEvent("pod-1", "asa-node-1", "zone-a", "ecs.gn8is.4xlarge", 30*time.Second)
+	nostock := noStockEvent("pod-2")
+
+	fc := fake.NewClientBuilder().WithScheme(eventsScheme()).WithObjects(provision, nostock).Build()
+	d := &GOATScalerDetector{}
+
+	nodes, err := d.Detect(context.Background(), fc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// ProvisionNode exists, so node should still be reported (provision wins over nostock)
+	if len(nodes) != 1 {
+		t.Fatalf("expected 1 node (ProvisionNode wins), got %d", len(nodes))
+	}
+}
+
+func TestGOATScaler_NoStock_OnlyNoStock_NoInflight(t *testing.T) {
+	// Only NoStock events, no ProvisionNode. Should return empty.
+	nostock1 := noStockEvent("pod-1")
+	nostock2 := noStockEvent("pod-2")
+
+	fc := fake.NewClientBuilder().WithScheme(eventsScheme()).WithObjects(nostock1, nostock2).Build()
+	d := &GOATScalerDetector{}
+
+	nodes, err := d.Detect(context.Background(), fc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// No ProvisionNode events, only NoStock. No inflight nodes.
+	if len(nodes) != 0 {
+		t.Fatalf("expected 0 nodes (only NoStock, no provision), got %d", len(nodes))
+	}
+}
+
+func TestGOATScaler_NoStock_FlagExposed(t *testing.T) {
+	// When NoStock is detected, the detector should set NoStock flag
+	// so the controller can log/warn about it.
+	nostock := noStockEvent("pod-1")
+
+	fc := fake.NewClientBuilder().WithScheme(eventsScheme()).WithObjects(nostock).Build()
+	d := &GOATScalerDetector{}
+
+	_, err := d.Detect(context.Background(), fc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !d.NoStockDetected {
+		t.Fatal("expected NoStockDetected=true when NoStock events present")
+	}
+}
+
+func TestGOATScaler_NoNoStock_FlagFalse(t *testing.T) {
+	provision := goatscalerEvent("pod-1", "asa-node-1", "zone", "type", 30*time.Second)
+
+	fc := fake.NewClientBuilder().WithScheme(eventsScheme()).WithObjects(provision).Build()
+	d := &GOATScalerDetector{}
+
+	_, err := d.Detect(context.Background(), fc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if d.NoStockDetected {
+		t.Fatal("expected NoStockDetected=false when no NoStock events")
+	}
+}
