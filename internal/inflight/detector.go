@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -17,6 +18,7 @@ type InflightNode struct {
 	Allocatable  map[string]int64
 	Labels       map[string]string
 	InstanceType string
+	DetectedAt   time.Time
 }
 
 // Detector detects in-flight nodes from cloud-specific signals.

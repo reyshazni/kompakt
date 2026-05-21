@@ -315,7 +315,7 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 	// Snapshot reservations before rebuild so they survive across cycles
 	reservations := r.Ledger.SnapshotReservations()
 	r.Ledger.ClearNodes()
-	r.Ledger.ClearInflight()
+	r.Ledger.ClearInflightByPrefix(profile.Name + "/")
 
 	// Sync existing nodes
 	nodeList := &corev1.NodeList{}
@@ -332,12 +332,31 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 		for res, qty := range node.Status.Allocatable {
 			alloc[string(res)] = qty.MilliValue()
 		}
+		// Resource readiness: skip nodes missing demanded resources
+		// (device plugin not yet registered). Only for ResourceRequest type.
+		if profile.Spec.DemandSource.Type == "ResourceRequest" {
+			missingResource := false
+			for _, res := range profile.Spec.DemandSource.Resources {
+				// Standard resources (cpu, memory) are always present
+				if res == "cpu" || res == "memory" {
+					continue
+				}
+				if _, exists := alloc[res]; !exists {
+					missingResource = true
+					break
+				}
+			}
+			if missingResource {
+				continue
+			}
+		}
+
 		r.Ledger.AddNode(node.Name, alloc, node.Labels, node.Spec.Taints)
 
 		// Transition tracking: if this node was previously inflight
 		// (GOATScaler provision-task-id links event name to real node)
 		if taskID := node.Labels["goatscaler.io/provision-task-id"]; taskID != "" {
-			r.Ledger.RemoveInflightNode(taskID)
+			r.Ledger.RemoveInflightNode(profile.Name + "/" + taskID)
 		}
 	}
 
@@ -406,6 +425,14 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 		r.activeDetectors = []string{activeDetector}
 	}
 
+	// Check for NoStock condition from GOATScaler
+	for _, d := range r.Detectors {
+		if gs, ok := d.(*inflight.GOATScalerDetector); ok && gs.NoStockDetected {
+			logger.Info("ECS stock shortage detected, some nodepools have no available capacity")
+			break
+		}
+	}
+
 	for _, n := range inflightNodes {
 		alloc := n.Allocatable
 		if len(alloc) == 0 {
@@ -419,7 +446,17 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 					"configuredTemplates", templateIdentifiers(profile.Spec.CapacitySource.NodeGroupTemplates))
 			}
 		}
-		r.Ledger.AddInflightNode(n.Name, alloc, n.Labels, nil)
+		inflightKey := profile.Name + "/" + n.Name
+		r.Ledger.AddInflightNode(inflightKey, alloc, n.Labels, nil)
+	}
+
+	// Warn about slow provisions
+	for _, n := range inflightNodes {
+		if !n.DetectedAt.IsZero() && time.Since(n.DetectedAt) > 5*time.Minute {
+			logger.Info("inflight node provisioning is taking longer than expected",
+				"node", n.Name, "age", time.Since(n.DetectedAt).Round(time.Second).String(),
+				"detector", activeDetector)
+		}
 	}
 
 	// Restore reservations from previous cycle onto rebuilt entries
