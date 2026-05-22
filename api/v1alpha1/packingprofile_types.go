@@ -39,7 +39,14 @@ type DemandSource struct {
 
 	// Resources lists the resource names to extract from container requests.
 	// Used when Type is ResourceRequest.
+	// Deprecated: use AdditionalResources instead. When Resources is set,
+	// it is used as-is for backward compatibility (cpu/memory NOT auto-added).
 	Resources []string `json:"resources,omitempty"`
+
+	// AdditionalResources lists extended resource names to track beyond cpu and memory.
+	// CPU and memory are always tracked implicitly when this field is used.
+	// Used when Type is ResourceRequest.
+	AdditionalResources []string `json:"additionalResources,omitempty"`
 
 	// Annotation is the annotation key holding the demand value.
 	// Used when Type is Annotation.
@@ -88,9 +95,10 @@ type NodeGroupTemplate struct {
 	InstanceType string `json:"instanceType,omitempty"`
 
 	// Allocatable is the expected allocatable resources in millivalue.
-	// Must contain at least one resource entry.
-	// +kubebuilder:validation:MinProperties=1
-	Allocatable map[string]int64 `json:"allocatable"`
+	// Optional when using NotReady node detection (kubelet reports allocatable
+	// before the node is Ready). Required when only Layer 1 detection is available
+	// and capacity must be known before the Node object exists.
+	Allocatable map[string]int64 `json:"allocatable,omitempty"`
 
 	// Labels are the expected node labels for inflight nodes from this group.
 	// Used for nodeSelector matching on inflight nodes whose labels are not

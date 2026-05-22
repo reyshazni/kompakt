@@ -308,6 +308,21 @@ func (l *NodeLedger) Snapshot() LedgerSnapshot {
 	}
 }
 
+// HasInflightSignal returns true if there are in-flight nodes with unknown
+// capacity (empty allocatable). This indicates Layer 1 detected a scale-up
+// but Layer 2 hasn't provided capacity data yet. Used by WaitForScaleUp
+// to hold pods when a node is coming but capacity is unknown.
+func (l *NodeLedger) HasInflightSignal() bool {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	for _, n := range l.inflight {
+		if len(n.allocatable) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func (l *NodeLedger) findEntry(name string) *nodeEntry {
 	if n, ok := l.nodes[name]; ok {
 		return n

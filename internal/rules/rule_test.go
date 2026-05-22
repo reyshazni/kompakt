@@ -406,3 +406,78 @@ func TestBinPackName(t *testing.T) {
 		t.Fatalf("expected BinPackOnInflightCapacity, got %s", rule.Name())
 	}
 }
+
+// --- Implicit cpu/memory + additionalResources ---
+
+func TestExtractDemand_ImplicitCPUMemory(t *testing.T) {
+	// When additionalResources is set, cpu and memory should still be extracted
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "implicit-test", Namespace: "default"},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name: "app",
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    *resource.NewMilliQuantity(2000, resource.DecimalSI),
+							corev1.ResourceMemory: *resource.NewQuantity(4*1024*1024*1024, resource.BinarySI),
+							corev1.ResourceName("aliyun.com/gpu-core.percentage"): *resource.NewQuantity(25, resource.DecimalSI),
+						},
+					},
+				},
+			},
+		},
+	}
+	demand := ExtractDemand(pod, v1alpha1.DemandSource{
+		Type:                "ResourceRequest",
+		AdditionalResources: []string{"aliyun.com/gpu-core.percentage"},
+	})
+	if demand["cpu"] == 0 {
+		t.Fatal("expected cpu to be implicitly included")
+	}
+	if demand["memory"] == 0 {
+		t.Fatal("expected memory to be implicitly included")
+	}
+	if demand["aliyun.com/gpu-core.percentage"] == 0 {
+		t.Fatal("expected gpu-core.percentage from additionalResources")
+	}
+}
+
+func TestExtractDemand_AdditionalResourcesOnly_StillIncludesCPUMemory(t *testing.T) {
+	// Even with only additionalResources (no resources field), cpu+memory implicit
+	pod := podWithCPU("test", 1000)
+	demand := ExtractDemand(pod, v1alpha1.DemandSource{
+		Type:                "ResourceRequest",
+		AdditionalResources: []string{},
+	})
+	if demand["cpu"] == 0 {
+		t.Fatal("expected cpu implicitly included even with empty additionalResources")
+	}
+}
+
+func TestExtractDemand_LegacyResources_BackwardCompat(t *testing.T) {
+	// Legacy resources field: use as-is, don't add implicit cpu/memory
+	pod := podWithCPU("test", 2000)
+	demand := ExtractDemand(pod, v1alpha1.DemandSource{
+		Type:      "ResourceRequest",
+		Resources: []string{"cpu"},
+	})
+	if demand["cpu"] != 2000 {
+		t.Fatalf("expected 2000m cpu, got %d", demand["cpu"])
+	}
+	// memory NOT included because legacy resources field is explicit
+	if demand["memory"] != 0 {
+		t.Fatal("expected memory=0 with legacy resources field (backward compat)")
+	}
+}
+
+func TestExtractDemand_NeitherField_OnlyCPUMemory(t *testing.T) {
+	// Neither resources nor additionalResources set: only cpu+memory
+	pod := podWithCPU("test", 3000)
+	demand := ExtractDemand(pod, v1alpha1.DemandSource{
+		Type: "ResourceRequest",
+	})
+	if demand["cpu"] == 0 {
+		t.Fatal("expected cpu with no explicit resource config")
+	}
+}

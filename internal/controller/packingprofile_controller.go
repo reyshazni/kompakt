@@ -630,6 +630,60 @@ func templateIdentifiers(templates []v1alpha1.NodeGroupTemplate) []string {
 	return ids
 }
 
+// findTemplateForPod finds the first NodeGroupTemplate whose labels satisfy
+// the pod's nodeSelector and whose taints are tolerated by the pod.
+// This matches template to pod (what the pod needs) rather than template to
+// node (what the node is).
+func findTemplateForPod(pod *corev1.Pod, templates []v1alpha1.NodeGroupTemplate) *v1alpha1.NodeGroupTemplate {
+	for i := range templates {
+		t := &templates[i]
+		// Check nodeSelector: all pod nodeSelector labels must exist in template labels
+		selectorMatch := true
+		for key, val := range pod.Spec.NodeSelector {
+			if t.Labels[key] != val {
+				selectorMatch = false
+				break
+			}
+		}
+		if !selectorMatch {
+			continue
+		}
+		// Check taints: all template taints must be tolerated by pod
+		coreTaints := templateTaintsToCoreTaints(t.Taints)
+		taintsMatch := true
+		for _, taint := range coreTaints {
+			if taint.Effect != corev1.TaintEffectNoSchedule && taint.Effect != corev1.TaintEffectNoExecute {
+				continue
+			}
+			if !toleratesTaint(pod.Spec.Tolerations, taint) {
+				taintsMatch = false
+				break
+			}
+		}
+		if !taintsMatch {
+			continue
+		}
+		return t
+	}
+	return nil
+}
+
+func toleratesTaint(tolerations []corev1.Toleration, taint corev1.Taint) bool {
+	for _, t := range tolerations {
+		if t.Operator == corev1.TolerationOpExists && (t.Key == "" || t.Key == taint.Key) {
+			if t.Effect == "" || t.Effect == taint.Effect {
+				return true
+			}
+		}
+		if t.Key == taint.Key && t.Value == taint.Value {
+			if t.Effect == "" || t.Effect == taint.Effect {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // findMatchingTemplate finds the first NodeGroupTemplate matching the inflight node.
 // Match priority: instanceType first, then namePrefix fallback.
 // Returns nil if no template matches.

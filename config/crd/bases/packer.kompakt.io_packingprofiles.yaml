@@ -91,8 +91,9 @@ spec:
                             type: integer
                           description: |-
                             Allocatable is the expected allocatable resources in millivalue.
-                            Must contain at least one resource entry.
-                          minProperties: 1
+                            Optional when using NotReady node detection (kubelet reports allocatable
+                            before the node is Ready). Required when only Layer 1 detection is available
+                            and capacity must be known before the Node object exists.
                           type: object
                         instanceType:
                           description: |-
@@ -135,8 +136,6 @@ spec:
                             - key
                             type: object
                           type: array
-                      required:
-                      - allocatable
                       type: object
                     type: array
                   perDeviceCount:
@@ -170,6 +169,14 @@ spec:
                 description: DemandSource defines how to extract resource demand from
                   matched pods.
                 properties:
+                  additionalResources:
+                    description: |-
+                      AdditionalResources lists extended resource names to track beyond cpu and memory.
+                      CPU and memory are always tracked implicitly when this field is used.
+                      Used when Type is ResourceRequest.
+                    items:
+                      type: string
+                    type: array
                   annotation:
                     description: |-
                       Annotation is the annotation key holding the demand value.
@@ -179,6 +186,8 @@ spec:
                     description: |-
                       Resources lists the resource names to extract from container requests.
                       Used when Type is ResourceRequest.
+                      Deprecated: use AdditionalResources instead. When Resources is set,
+                      it is used as-is for backward compatibility (cpu/memory NOT auto-added).
                     items:
                       type: string
                     type: array

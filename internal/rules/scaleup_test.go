@@ -168,3 +168,49 @@ func TestWaitForScaleUpName(t *testing.T) {
 		t.Fatalf("expected WaitForScaleUp, got %s", rule.Name())
 	}
 }
+
+func TestWaitForScaleUp_Layer1SignalOnly_Hold(t *testing.T) {
+	// Layer 1 detected inflight node but with empty allocatable (no capacity data yet).
+	// WaitForScaleUp should HOLD (not passthrough) because a node is coming.
+	l := ledger.New()
+	l.AddInflightNode("goatscaler/asa-xyz", map[string]int64{}, nil, nil)
+
+	rule := &WaitForScaleUp{}
+	release, _, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if release {
+		t.Fatal("expected hold when inflight signal exists but no capacity data")
+	}
+}
+
+func TestWaitForScaleUp_Layer2WithCapacity_Hold(t *testing.T) {
+	// Layer 2 NotReady node with real allocatable. Pod fits. Hold.
+	l := ledger.New()
+	l.AddInflightNode("notready/gpu-node", map[string]int64{"cpu": 4000}, nil, nil)
+
+	rule := &WaitForScaleUp{}
+	release, _, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if release {
+		t.Fatal("expected hold when inflight has capacity and pod fits")
+	}
+}
+
+func TestWaitForScaleUp_Layer2WithCapacity_DoesntFit_Passthrough(t *testing.T) {
+	// Layer 2 NotReady node with real allocatable but pod doesn't fit. Passthrough.
+	l := ledger.New()
+	l.AddInflightNode("notready/gpu-node", map[string]int64{"cpu": 500}, nil, nil)
+
+	rule := &WaitForScaleUp{}
+	release, _, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !release {
+		t.Fatal("expected passthrough when inflight has capacity but pod doesn't fit")
+	}
+}

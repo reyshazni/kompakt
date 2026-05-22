@@ -984,3 +984,115 @@ func TestStatus_Ready_False_WhenProfileInvalid(t *testing.T) {
 		t.Fatalf("expected reason NotReady, got %s", ready.Reason)
 	}
 }
+
+// --- Template-to-pod matching ---
+
+func TestFindTemplateForPod_NodeSelectorMatch(t *testing.T) {
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			NodeSelector: map[string]string{"project": "team-a"},
+		},
+	}
+	templates := []v1alpha1.NodeGroupTemplate{
+		{Labels: map[string]string{"project": "team-b"}},
+		{Labels: map[string]string{"project": "team-a"}},
+	}
+	tmpl := findTemplateForPod(pod, templates)
+	if tmpl == nil {
+		t.Fatal("expected template match for nodeSelector project=team-a")
+	}
+	if tmpl.Labels["project"] != "team-a" {
+		t.Fatalf("expected team-a template, got %v", tmpl.Labels)
+	}
+}
+
+func TestFindTemplateForPod_NodeSelectorNoMatch(t *testing.T) {
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			NodeSelector: map[string]string{"project": "team-c"},
+		},
+	}
+	templates := []v1alpha1.NodeGroupTemplate{
+		{Labels: map[string]string{"project": "team-a"}},
+		{Labels: map[string]string{"project": "team-b"}},
+	}
+	tmpl := findTemplateForPod(pod, templates)
+	if tmpl != nil {
+		t.Fatal("expected no match for nodeSelector project=team-c")
+	}
+}
+
+func TestFindTemplateForPod_TolerationMatch(t *testing.T) {
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Tolerations: []corev1.Toleration{
+				{Key: "gpu", Value: "true", Effect: corev1.TaintEffectNoSchedule},
+			},
+		},
+	}
+	templates := []v1alpha1.NodeGroupTemplate{
+		{
+			Taints: []v1alpha1.NodeGroupTaint{
+				{Key: "gpu", Value: "true", Effect: "NoSchedule"},
+			},
+		},
+	}
+	tmpl := findTemplateForPod(pod, templates)
+	if tmpl == nil {
+		t.Fatal("expected template match for toleration")
+	}
+}
+
+func TestFindTemplateForPod_TaintNotTolerated(t *testing.T) {
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{}, // no tolerations
+	}
+	templates := []v1alpha1.NodeGroupTemplate{
+		{
+			Taints: []v1alpha1.NodeGroupTaint{
+				{Key: "gpu", Value: "true", Effect: "NoSchedule"},
+			},
+		},
+	}
+	tmpl := findTemplateForPod(pod, templates)
+	if tmpl != nil {
+		t.Fatal("expected no match, pod doesn't tolerate taint")
+	}
+}
+
+func TestFindTemplateForPod_NoConstraints_MatchesFirst(t *testing.T) {
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{}, // no nodeSelector, no tolerations
+	}
+	templates := []v1alpha1.NodeGroupTemplate{
+		{Labels: map[string]string{"pool": "default"}},
+	}
+	// Template has no taints, pod has no nodeSelector -> match
+	tmpl := findTemplateForPod(pod, templates)
+	if tmpl == nil {
+		t.Fatal("expected match when no constraints on either side")
+	}
+}
+
+func TestFindTemplateForPod_BothNodeSelectorAndToleration(t *testing.T) {
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			NodeSelector: map[string]string{"project": "team-a"},
+			Tolerations: []corev1.Toleration{
+				{Key: "project", Value: "team-a", Effect: corev1.TaintEffectNoSchedule},
+			},
+		},
+	}
+	templates := []v1alpha1.NodeGroupTemplate{
+		{
+			Labels: map[string]string{"project": "team-a"},
+			Taints: []v1alpha1.NodeGroupTaint{
+				{Key: "project", Value: "team-a", Effect: "NoSchedule"},
+			},
+		},
+	}
+	tmpl := findTemplateForPod(pod, templates)
+	if tmpl == nil {
+		t.Fatal("expected match with both nodeSelector and toleration")
+	}
+}

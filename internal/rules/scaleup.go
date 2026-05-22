@@ -42,7 +42,12 @@ func (r *WaitForScaleUp) Evaluate(
 	constraints := extractConstraints(pod)
 	nodeName, isInflight, err := l.FindFit(demand, constraints)
 	if err != nil {
-		// No capacity anywhere -- release to trigger autoscaler
+		// No capacity match. But if inflight nodes exist (Layer 1 signal),
+		// hold anyway. A node is coming but we don't have capacity data yet.
+		if l.HasInflightSignal() {
+			return false, "", nil
+		}
+		// No capacity, no inflight signal -- release to trigger autoscaler
 		return true, "", nil
 	}
 

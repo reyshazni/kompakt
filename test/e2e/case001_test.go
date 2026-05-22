@@ -127,7 +127,9 @@ lastTimestamp: "%s"
 	if out, err := kubectlApply(eventYAML); err != nil {
 		t.Fatalf("inject GOATScaler event: %s", out)
 	}
-	defer func() { _, _ = kubectl("delete", "event", "e2e-case001-provision", "-n", "default", "--ignore-not-found") }()
+	defer func() {
+		_, _ = kubectl("delete", "event", "e2e-case001-provision", "-n", "default", "--ignore-not-found")
+	}()
 	t.Log("Step 2 OK: GOATScaler event injected")
 
 	// Give controller time to pick up the event

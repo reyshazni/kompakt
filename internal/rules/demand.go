@@ -21,7 +21,14 @@ func extractConstraints(pod *corev1.Pod) *ledger.PodSchedulingConstraints {
 func ExtractDemand(pod *corev1.Pod, source v1alpha1.DemandSource) map[string]int64 {
 	switch source.Type {
 	case "ResourceRequest":
-		return extractFromRequests(pod, source.Resources)
+		if len(source.Resources) > 0 {
+			// Legacy: use explicit list as-is (backward compat)
+			return extractFromRequests(pod, source.Resources)
+		}
+		// New: always include cpu + memory, plus any additionalResources
+		resources := []string{"cpu", "memory"}
+		resources = append(resources, source.AdditionalResources...)
+		return extractFromRequests(pod, resources)
 	case "Annotation":
 		return extractFromAnnotation(pod, source.Annotation)
 	default:
