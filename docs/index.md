@@ -48,6 +48,8 @@ You can use one or both rules per profile. For most production clusters, both ru
 
 ## Next steps
 
+- [Why Kompakt? Read the problem statement](introduction/problem-statement.md)
+- [Compare with existing tools](introduction/prior-art.md)
 - [Install Kompakt](getting-started/installation.md)
 - [Create your first PackingProfile](getting-started/first-profile.md)
 - [Understand how it works](concepts/how-it-works.md)

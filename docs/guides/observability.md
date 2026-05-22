@@ -141,5 +141,6 @@ groups:
 
 ## Next steps
 
-- [Prometheus metrics reference](../reference/metrics.md) for the full metrics list
+- [Prometheus metrics reference](../reference/metrics.md) for the full metrics list and PromQL query examples
+- [Alert runbooks](../operations/runbooks.md) for per-alert diagnosis and resolution steps
 - [Troubleshooting](troubleshooting.md) for diagnosing common issues

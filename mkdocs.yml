@@ -58,6 +58,9 @@ plugins:
 
 nav:
   - Home: index.md
+  - Introduction:
+    - Problem Statement: introduction/problem-statement.md
+    - Prior Art & Alternatives: introduction/prior-art.md
   - Getting Started:
     - Installation: getting-started/installation.md
     - Your First PackingProfile: getting-started/first-profile.md
@@ -73,10 +76,14 @@ nav:
     - GPU Packing: guides/gpu-packing.md
     - Scale-from-zero GPU: guides/scale-from-zero-gpu.md
     - Multi-cloud Setup: guides/multi-cloud.md
+    - Resource Sizing: guides/resource-sizing.md
+  - Operations:
     - Observability: guides/observability.md
+    - Alert Runbooks: operations/runbooks.md
     - Troubleshooting: guides/troubleshooting.md
   - Reference:
     - PackingProfile API: reference/api-reference.md
+    - Node Group Templates: reference/node-group-templates.md
     - Prometheus Metrics: reference/metrics.md
     - RBAC Requirements: reference/rbac.md
     - Compatibility Matrix: reference/compatibility.md

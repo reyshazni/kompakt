@@ -176,24 +176,9 @@ jupyter-notebook-3    Running   <none>   cn-jakarta.172.16.1.11
 
 2 nodes for 4 half-GPU notebooks instead of 4 nodes.
 
-## Finding your node pool name
+## Finding your node pool name and template values
 
-The `namePrefix` must match the node group name in the cluster autoscaler status ConfigMap:
-
-```bash
-kubectl get configmap cluster-autoscaler-status -n kube-system -o yaml
-```
-
-Look for lines like:
-
-```
-Name: pool-l20
-Health: ready=0, cloudProviderTarget=2
-```
-
-Use `pool-l20` as your `namePrefix`.
-
-If the ConfigMap does not exist, your cluster may use a different autoscaler (e.g., Karpenter). Check your cloud provider's documentation for how autoscaler status is reported.
+See the [Node Group Templates Reference](../reference/node-group-templates.md) for how to find `namePrefix`, `allocatable` values, and how to configure labels and taints on templates. The reference covers CA ConfigMap, GOATScaler, and Karpenter detection sources.
 
 ## Adding BinPack for mixed scenarios
 

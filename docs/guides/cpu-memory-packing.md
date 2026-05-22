@@ -187,33 +187,7 @@ With Kompakt, the same deployment provisions 3 nodes. The first pod triggers a s
 
 ## Finding your nodeGroupTemplate values
 
-You need two things: the node pool name (for `namePrefix`) and the instance type's resources (for `allocatable`).
-
-**Node pool name**: check the cluster autoscaler status ConfigMap:
-
-```bash
-kubectl get configmap cluster-autoscaler-status -n kube-system -o yaml
-```
-
-Look for lines like:
-
-```
-Name: pool-cpu-4xlarge
-Health: ready=2, cloudProviderTarget=4
-```
-
-Use `pool-cpu-4xlarge` as your `namePrefix`.
-
-**Allocatable resources**: check an existing node of the same instance type:
-
-```bash
-kubectl get node <node-name> -o jsonpath='{.status.allocatable}' | jq
-```
-
-Or check your cloud provider's console for the instance type's CPU and memory. Convert to millivalue: 16 vCPU = `16000`, 64 GiB memory = `64000000000` (in milli-bytes via `resource.Quantity.MilliValue()`).
-
-!!! note
-    If your cluster does not have any running nodes of that type yet, check your cloud provider's documentation for the instance type specs.
+See the [Node Group Templates Reference](../reference/node-group-templates.md) for how to find your `namePrefix`, `allocatable` values, and how to configure labels and taints on templates.
 
 ## Using different profiles for different tiers
 

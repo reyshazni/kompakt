@@ -201,40 +201,7 @@ No `nodeGroupTemplates` needed since there are no in-flight nodes to track. No `
 
 ## Finding your nodeGroupTemplate values
 
-You need two things: the node pool name (for `namePrefix`) and the GPU resources (for `allocatable`).
-
-**Node pool name**: check the cluster autoscaler status ConfigMap:
-
-```bash
-kubectl get configmap cluster-autoscaler-status -n kube-system -o yaml
-```
-
-Look for lines like:
-
-```
-Name: pool-l20
-Health: ready=0, cloudProviderTarget=2
-```
-
-Use `pool-l20` as your `namePrefix`.
-
-**Allocatable resources**: if you have an existing GPU node of the same type:
-
-```bash
-# For NVIDIA device-plugin
-kubectl get node <gpu-node-name> -o jsonpath='{.status.allocatable.nvidia\.com/gpu}'
-
-# For cGPU, check the node label
-kubectl get node <gpu-node-name> -o jsonpath='{.metadata.labels.aliyun\.accelerator/gpu-memory-mib}'
-```
-
-If no GPU nodes exist yet, check your cloud provider's documentation:
-
-- **NVIDIA L20**: 48 GiB VRAM = 49152 MiB
-- **NVIDIA A100 40GB**: 40960 MiB
-- **NVIDIA A100 80GB**: 81920 MiB
-- **NVIDIA V100**: 16384 MiB
-- **NVIDIA T4**: 15360 MiB
+See the [Node Group Templates Reference](../reference/node-group-templates.md) for how to find your `namePrefix`, `allocatable` values (including GPU-specific resources), and how to configure labels and taints on templates.
 
 ## GPU timeout considerations
 

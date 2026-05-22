@@ -126,9 +126,20 @@ If you prefer kustomize over Helm:
 kubectl apply -k https://github.com/reyshazni/kompakt/config/default
 ```
 
-To customize the namespace or image, create a file called `kustomization.yaml`:
+To customize, create a `kustomization.yaml` that references the default overlay:
 
 ```yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kompakt-system
+resources:
+  - https://github.com/reyshazni/kompakt/config/default
+```
+
+To customize, create a patch file alongside your `kustomization.yaml`:
+
+```yaml
+# kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: my-namespace
@@ -138,7 +149,46 @@ images:
   - name: ghcr.io/reyshazni/kompakt
     newName: your-registry.example.com/kompakt
     newTag: v0.1.0
+patches:
+  - path: patch-manager.yaml
 ```
+
+```yaml
+# patch-manager.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kompakt-controller
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: manager
+          args:
+            - --leader-elect
+            - --zap-log-level=1
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+```
+
+**What you can customize:**
+
+| Field | Default | Notes |
+|---|---|---|
+| `namespace` | `kompakt-system` | Change in kustomization.yaml |
+| `images` | `ghcr.io/reyshazni/kompakt:latest` | For private registry |
+| `replicas` | `1` | Increase for HA (leader election built-in) |
+| `resources.requests.cpu` | `50m` | See [Resource Sizing](../guides/resource-sizing.md) |
+| `resources.requests.memory` | `64Mi` | Flat, does not scale with pod count |
+| `resources.limits.cpu` | `500m` | ~200 concurrent gated pods |
+| `resources.limits.memory` | `128Mi` | 2x request, covers GC spikes |
+| `--zap-log-level` | `0` (info) | `1`=debug, `3`=verbose, `4`=trace |
 
 Then apply:
 
