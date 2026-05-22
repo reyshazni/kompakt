@@ -435,19 +435,29 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 
 	for _, n := range inflightNodes {
 		alloc := n.Allocatable
-		if len(alloc) == 0 {
-			alloc = matchNodeGroupTemplate(n, profile.Spec.CapacitySource.NodeGroupTemplates)
-			if alloc != nil {
-				logger.V(1).Info("inflight node enriched from template", "node", n.Name,
-					"detector", activeDetector, "instanceType", n.InstanceType, "allocatable", alloc)
-			} else {
-				logger.Info("inflight node has no matching template, capacity unknown",
-					"node", n.Name, "detector", activeDetector,
-					"configuredTemplates", templateIdentifiers(profile.Spec.CapacitySource.NodeGroupTemplates))
+		nodeLabels := n.Labels
+		var nodeTaints []corev1.Taint
+
+		tmpl := findMatchingTemplate(n, profile.Spec.CapacitySource.NodeGroupTemplates)
+		if tmpl != nil {
+			if len(alloc) == 0 {
+				alloc = copyTemplateAllocatable(tmpl.Allocatable)
 			}
+			// Enrich inflight node with template labels and taints
+			if len(nodeLabels) == 0 {
+				nodeLabels = tmpl.Labels
+			}
+			nodeTaints = templateTaintsToCoreTaints(tmpl.Taints)
+			logger.V(1).Info("inflight node enriched from template", "node", n.Name,
+				"detector", activeDetector, "instanceType", n.InstanceType)
+		} else if len(alloc) == 0 {
+			logger.Info("inflight node has no matching template, capacity unknown",
+				"node", n.Name, "detector", activeDetector,
+				"configuredTemplates", templateIdentifiers(profile.Spec.CapacitySource.NodeGroupTemplates))
 		}
+
 		inflightKey := profile.Name + "/" + n.Name
-		r.Ledger.AddInflightNode(inflightKey, alloc, n.Labels, nil)
+		r.Ledger.AddInflightNode(inflightKey, alloc, nodeLabels, nodeTaints)
 	}
 
 	// Warn about slow provisions
@@ -620,26 +630,38 @@ func templateIdentifiers(templates []v1alpha1.NodeGroupTemplate) []string {
 	return ids
 }
 
-// matchNodeGroupTemplate finds the first NodeGroupTemplate matching the
-// inflight node and returns a copy of its allocatable map.
+// findMatchingTemplate finds the first NodeGroupTemplate matching the inflight node.
 // Match priority: instanceType first, then namePrefix fallback.
 // Returns nil if no template matches.
-func matchNodeGroupTemplate(node inflight.InflightNode, templates []v1alpha1.NodeGroupTemplate) map[string]int64 {
-	// 1. Match by instance type (GOATScaler + NotReady path)
+func findMatchingTemplate(node inflight.InflightNode, templates []v1alpha1.NodeGroupTemplate) *v1alpha1.NodeGroupTemplate {
 	if node.InstanceType != "" {
-		for _, t := range templates {
-			if t.InstanceType != "" && t.InstanceType == node.InstanceType {
-				return copyTemplateAllocatable(t.Allocatable)
+		for i := range templates {
+			if templates[i].InstanceType != "" && templates[i].InstanceType == node.InstanceType {
+				return &templates[i]
 			}
 		}
 	}
-	// 2. Fallback to name prefix (CA path)
-	for _, t := range templates {
-		if t.NamePrefix != "" && strings.HasPrefix(node.Name, t.NamePrefix) {
-			return copyTemplateAllocatable(t.Allocatable)
+	for i := range templates {
+		if templates[i].NamePrefix != "" && strings.HasPrefix(node.Name, templates[i].NamePrefix) {
+			return &templates[i]
 		}
 	}
 	return nil
+}
+
+func templateTaintsToCoreTaints(taints []v1alpha1.NodeGroupTaint) []corev1.Taint {
+	if len(taints) == 0 {
+		return nil
+	}
+	out := make([]corev1.Taint, len(taints))
+	for i, t := range taints {
+		out[i] = corev1.Taint{
+			Key:    t.Key,
+			Value:  t.Value,
+			Effect: corev1.TaintEffect(t.Effect),
+		}
+	}
+	return out
 }
 
 func copyTemplateAllocatable(m map[string]int64) map[string]int64 {

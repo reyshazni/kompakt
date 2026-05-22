@@ -99,11 +99,42 @@ spec:
                             InstanceType is the cloud instance type to match against inflight nodes.
                             Used by GOATScaler detector (event message) and NotReady detector (node label).
                           type: string
+                        labels:
+                          additionalProperties:
+                            type: string
+                          description: |-
+                            Labels are the expected node labels for inflight nodes from this group.
+                            Used for nodeSelector matching on inflight nodes whose labels are not
+                            yet available from the K8s API (GOATScaler, CA detectors).
+                          type: object
                         namePrefix:
                           description: |-
                             NamePrefix is the node group name prefix to match against inflight node names.
                             Used by ClusterAutoscaler detector (CA status ConfigMap names).
                           type: string
+                        taints:
+                          description: |-
+                            Taints are the expected node taints for inflight nodes from this group.
+                            Used for toleration matching. Format: "key=value:effect".
+                          items:
+                            description: NodeGroupTaint declares an expected taint
+                              on nodes in a node group.
+                            properties:
+                              effect:
+                                description: Effect is the taint effect (NoSchedule,
+                                  NoExecute, PreferNoSchedule).
+                                type: string
+                              key:
+                                description: Key is the taint key.
+                                type: string
+                              value:
+                                description: Value is the taint value.
+                                type: string
+                            required:
+                            - effect
+                            - key
+                            type: object
+                          type: array
                       required:
                       - allocatable
                       type: object

@@ -91,6 +91,25 @@ type NodeGroupTemplate struct {
 	// Must contain at least one resource entry.
 	// +kubebuilder:validation:MinProperties=1
 	Allocatable map[string]int64 `json:"allocatable"`
+
+	// Labels are the expected node labels for inflight nodes from this group.
+	// Used for nodeSelector matching on inflight nodes whose labels are not
+	// yet available from the K8s API (GOATScaler, CA detectors).
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// Taints are the expected node taints for inflight nodes from this group.
+	// Used for toleration matching. Format: "key=value:effect".
+	Taints []NodeGroupTaint `json:"taints,omitempty"`
+}
+
+// NodeGroupTaint declares an expected taint on nodes in a node group.
+type NodeGroupTaint struct {
+	// Key is the taint key.
+	Key string `json:"key"`
+	// Value is the taint value.
+	Value string `json:"value,omitempty"`
+	// Effect is the taint effect (NoSchedule, NoExecute, PreferNoSchedule).
+	Effect string `json:"effect"`
 }
 
 // LabelRef is a reference to a node label.
