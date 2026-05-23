@@ -4,6 +4,8 @@
 
 Kompakt occupies the gap between admission and scheduling. It holds pods at admission time using Kubernetes [scheduling gates](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/) (GA since v1.30) and releases them when rules confirm that capacity is available, incoming, or needs to be requested. Everything below Kompakt (the scheduler, the autoscaler) is unmodified.
 
+![System Context](../diagrams/01-system-context.svg)
+
 ## Components
 
 ### Mutating admission webhook
