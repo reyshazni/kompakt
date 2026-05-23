@@ -252,7 +252,7 @@ alert: KompaktNoInflightDetection
 expr: kompakt_ledger_inflight_nodes == 0 and kompakt_gated_pods > 0
 for: 5m
 annotations:
-  summary: Pods are gated but no in-flight nodes detected -- WaitForScaleUp cannot make decisions
+  summary: Pods are gated but no in-flight nodes detected -- WaitForNodeReady cannot make decisions
 ```
 
 ### KompaktWebhookDown

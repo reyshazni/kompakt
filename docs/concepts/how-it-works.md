@@ -22,8 +22,8 @@ Each rule in the profile maps to a distinct gate name:
 
 | Rule | Gate |
 |---|---|
-| BinPackOnInflightCapacity | `kompakt.io/awaiting-bin-pack` |
-| WaitForScaleUp | `kompakt.io/awaiting-scale-up` |
+| WaitForWorkloadPacking | `kompakt.io/wait-for-workload-packing` |
+| WaitForNodeReady | `kompakt.io/wait-for-node-ready` |
 
 If a profile specifies both rules, both gates are injected. Each gate is managed independently by the corresponding rule.
 
@@ -63,21 +63,21 @@ See [PackingProfiles](packing-profiles.md) for details.
 ### Scenario 1: Existing node has capacity (BinPack)
 
 1. Pod A is created with label `packer.kompakt.io/packing-profile: my-profile`
-2. Webhook injects `kompakt.io/awaiting-bin-pack` gate
+2. Webhook injects `kompakt.io/wait-for-workload-packing` gate
 3. Controller syncs ledger: node-1 has 4 CPU free
 4. BinPack rule finds node-1 fits Pod A's 1 CPU demand, reserves the slot
 5. Controller releases gate, injects `nodeAffinity` pointing to node-1
 6. Scheduler places Pod A on node-1
 7. Pod A event: `GateReleased: gate released, reason=capacity, targetNode=node-1`
 
-### Scenario 2: No capacity, need scale-up (WaitForScaleUp)
+### Scenario 2: No capacity, need scale-up (WaitForNodeReady)
 
 1. Pod A is created, no nodes have capacity, no in-flight nodes exist
-2. WaitForScaleUp rule: no capacity anywhere -- **release immediately** (passthrough)
+2. WaitForNodeReady rule: no capacity anywhere -- **release immediately** (passthrough)
 3. Pod A becomes visible to the autoscaler, which triggers a scale-up
 4. Node starts provisioning. Kompakt detects this from the `cluster-autoscaler-status` ConfigMap
 5. Pod B is created while the node is provisioning
-6. WaitForScaleUp rule: in-flight node can fit Pod B -- **hold the gate**, reserve capacity on the incoming node
+6. WaitForNodeReady rule: in-flight node can fit Pod B -- **hold the gate**, reserve capacity on the incoming node
 7. Pod B stays invisible to the autoscaler. No second scale-up triggered.
 8. Node becomes Ready, Pod A starts running
 9. Controller re-evaluates Pod B: existing node now has capacity -- **release with node affinity**
@@ -109,7 +109,7 @@ Kompakt provides multiple layers of visibility:
 
 ```
 NAME                 DEMAND            RULES                                          GATES   INFLIGHT   READY   AGE
-general-cpu-coord    ResourceRequest   ["BinPackOnInflightCapacity","WaitForScaleUp"]  3       2          True    1h
+general-cpu-coord    ResourceRequest   ["WaitForWorkloadPacking","WaitForNodeReady"]  3       2          True    1h
 ```
 
 **Profile status** (kubectl describe packingprofile):

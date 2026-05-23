@@ -527,13 +527,13 @@ func setProfileValidCondition(profile *v1alpha1.PackingProfile) {
 
 	hasScaleUp := false
 	for _, r := range profile.Spec.Rules {
-		if r.Name == "WaitForScaleUp" {
+		if r.Name == "WaitForNodeReady" {
 			hasScaleUp = true
 			break
 		}
 	}
 	if hasScaleUp && len(cs.NodeGroupTemplates) == 0 {
-		issues = append(issues, "WaitForScaleUp rule requires nodeGroupTemplates")
+		issues = append(issues, "WaitForNodeReady rule requires nodeGroupTemplates")
 	}
 
 	if len(issues) > 0 {
@@ -610,13 +610,13 @@ func warnProfileMisconfig(logger logr.Logger, profile *v1alpha1.PackingProfile) 
 
 	hasScaleUpRule := false
 	for _, r := range profile.Spec.Rules {
-		if r.Name == "WaitForScaleUp" {
+		if r.Name == "WaitForNodeReady" {
 			hasScaleUpRule = true
 			break
 		}
 	}
 	if hasScaleUpRule && len(cs.NodeGroupTemplates) == 0 {
-		logger.Info("WaitForScaleUp rule configured but no nodeGroupTemplates defined, inflight nodes will have unknown capacity")
+		logger.Info("WaitForNodeReady rule configured but no nodeGroupTemplates defined, inflight nodes will have unknown capacity")
 	}
 }
 

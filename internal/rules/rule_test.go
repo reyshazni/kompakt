@@ -46,7 +46,7 @@ func TestBinPack_CapacityAvailable(t *testing.T) {
 	l := ledger.New()
 	l.AddNode("node-1", map[string]int64{"cpu": 4000}, nil, nil)
 
-	rule := &BinPackOnInflightCapacity{}
+	rule := &WaitForWorkloadPacking{}
 	release, nodeName, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -63,7 +63,7 @@ func TestBinPack_NoCapacity(t *testing.T) {
 	l := ledger.New()
 	l.AddNode("node-1", map[string]int64{"cpu": 500}, nil, nil)
 
-	rule := &BinPackOnInflightCapacity{}
+	rule := &WaitForWorkloadPacking{}
 	release, _, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -78,7 +78,7 @@ func TestBinPack_InflightCapacity_Ignored(t *testing.T) {
 	l := ledger.New()
 	l.AddInflightNode("inflight-1", map[string]int64{"cpu": 4000}, nil, nil)
 
-	rule := &BinPackOnInflightCapacity{}
+	rule := &WaitForWorkloadPacking{}
 	release, _, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -94,7 +94,7 @@ func TestBinPack_IgnoresInflight_WhenExistingAlsoFits(t *testing.T) {
 	l.AddNode("existing", map[string]int64{"cpu": 8000}, nil, nil)
 	l.AddInflightNode("inflight", map[string]int64{"cpu": 2000}, nil, nil)
 
-	rule := &BinPackOnInflightCapacity{}
+	rule := &WaitForWorkloadPacking{}
 	release, nodeName, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -129,7 +129,7 @@ func TestBinPack_AnnotationDemand(t *testing.T) {
 		},
 	}
 
-	rule := &BinPackOnInflightCapacity{}
+	rule := &WaitForWorkloadPacking{}
 	release, nodeName, err := rule.Evaluate(context.Background(), pod, l, profile)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -169,9 +169,9 @@ func TestExtractDemand_Annotation(t *testing.T) {
 }
 
 func TestRegistry_BinPackRegistered(t *testing.T) {
-	_, ok := Registry["BinPackOnInflightCapacity"]
+	_, ok := Registry["WaitForWorkloadPacking"]
 	if !ok {
-		t.Fatal("BinPackOnInflightCapacity not registered in global registry")
+		t.Fatal("WaitForWorkloadPacking not registered in global registry")
 	}
 }
 
@@ -188,7 +188,7 @@ func TestBinPack_EmptyDemand_ReleasesImmediately(t *testing.T) {
 		},
 	}
 
-	rule := &BinPackOnInflightCapacity{}
+	rule := &WaitForWorkloadPacking{}
 	release, nodeName, err := rule.Evaluate(context.Background(), pod, l, profile)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -206,7 +206,7 @@ func TestBinPack_ReservationSideEffect(t *testing.T) {
 	l := ledger.New()
 	l.AddNode("node-1", map[string]int64{"cpu": 3000}, nil, nil)
 
-	rule := &BinPackOnInflightCapacity{}
+	rule := &WaitForWorkloadPacking{}
 	profile := cpuProfile()
 
 	// First pod: 2000m, should fit
@@ -253,7 +253,7 @@ func TestBinPack_MultiContainer_SumsDemand(t *testing.T) {
 		},
 	}
 
-	rule := &BinPackOnInflightCapacity{}
+	rule := &WaitForWorkloadPacking{}
 	release, _, err := rule.Evaluate(context.Background(), pod, l, cpuProfile())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -292,7 +292,7 @@ func TestBinPack_MultiContainer_ExceedsCapacity(t *testing.T) {
 		},
 	}
 
-	rule := &BinPackOnInflightCapacity{}
+	rule := &WaitForWorkloadPacking{}
 	release, _, err := rule.Evaluate(context.Background(), pod, l, cpuProfile())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -391,7 +391,7 @@ func TestBinPack_InflightEmptyAllocatable_NoFit(t *testing.T) {
 	l := ledger.New()
 	l.AddInflightNode("inflight-1", map[string]int64{}, nil, nil)
 
-	rule := &BinPackOnInflightCapacity{}
+	rule := &WaitForWorkloadPacking{}
 	release, _, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -402,9 +402,9 @@ func TestBinPack_InflightEmptyAllocatable_NoFit(t *testing.T) {
 }
 
 func TestBinPackName(t *testing.T) {
-	rule := &BinPackOnInflightCapacity{}
-	if rule.Name() != "BinPackOnInflightCapacity" {
-		t.Fatalf("expected BinPackOnInflightCapacity, got %s", rule.Name())
+	rule := &WaitForWorkloadPacking{}
+	if rule.Name() != "WaitForWorkloadPacking" {
+		t.Fatalf("expected WaitForWorkloadPacking, got %s", rule.Name())
 	}
 }
 

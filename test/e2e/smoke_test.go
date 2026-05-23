@@ -29,7 +29,7 @@ func TestWebhookFunctional(t *testing.T) {
 		if err != nil {
 			return false
 		}
-		return strings.Contains(out, "kompakt.io/awaiting-bin-pack")
+		return strings.Contains(out, "kompakt.io/wait-for-workload-packing")
 	})
 }
 

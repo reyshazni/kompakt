@@ -26,8 +26,8 @@ spec:
         status: "True"
 
   rules:
-    - name: BinPackOnInflightCapacity
-    - name: WaitForScaleUp
+    - name: WaitForWorkloadPacking
+    - name: WaitForNodeReady
 
   reservationTimeout: 3m
 ```
@@ -87,7 +87,7 @@ kubectl get packingprofiles
 
 ```
 NAME                         DEMAND            RULES                        ACTIVE GATES   AGE
-general-cpu-coordination     ResourceRequest   BinPackOnInflightCapacity    0              10s
+general-cpu-coordination     ResourceRequest   WaitForWorkloadPacking    0              10s
 ```
 
 Deploy a workload and watch for gated pods:
@@ -99,7 +99,7 @@ STATUS:.status.phase,\
 GATES:.spec.schedulingGates[*].name
 ```
 
-Pods with the profile label will show `kompakt.io/awaiting-bin-pack` in the GATES column while the controller evaluates capacity. Once capacity is confirmed, the gate is removed and the pod schedules normally.
+Pods with the profile label will show `kompakt.io/wait-for-workload-packing` in the GATES column while the controller evaluates capacity. Once capacity is confirmed, the gate is removed and the pod schedules normally.
 
 ## 4. Understand what happened
 
@@ -108,7 +108,7 @@ When your labeled pods are created:
 1. The Kompakt webhook intercepts the pod creation request
 2. It reads the `packer.kompakt.io/packing-profile` label
 3. It looks up the PackingProfile `general-cpu-coordination`
-4. It injects `spec.schedulingGates: [{name: "kompakt.io/awaiting-bin-pack"}]`
+4. It injects `spec.schedulingGates: [{name: "kompakt.io/wait-for-workload-packing"}]`
 5. The pod is stored in etcd as gated. The scheduler ignores it.
 6. The controller checks the in-flight node ledger for available capacity
 7. When capacity is confirmed, the controller removes the gate and optionally adds node affinity

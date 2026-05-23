@@ -126,7 +126,7 @@ func TestPriorityAnnotationWrongValue(t *testing.T) {
 		if err != nil {
 			return false
 		}
-		return strings.Contains(out, "kompakt.io/awaiting-bin-pack")
+		return strings.Contains(out, "kompakt.io/wait-for-workload-packing")
 	})
 
 	// The pod should still get released via normal capacity path (kind has capacity),

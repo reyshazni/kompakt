@@ -17,7 +17,7 @@ func TestCase001_WaitForInflightNodeReady(t *testing.T) {
 	defer cleanupProfile(profile)
 
 	// Profile that demands a resource kind nodes don't have (fake.io/gpu).
-	// WaitForScaleUp only (no BinPack, since we want passthrough behavior).
+	// WaitForNodeReady only (no BinPack, since we want passthrough behavior).
 	profileYAML := fmt.Sprintf(`
 apiVersion: packer.kompakt.io/v1alpha1
 kind: PackingProfile
@@ -41,7 +41,7 @@ spec:
       - type: Ready
         status: "True"
   rules:
-    - name: WaitForScaleUp
+    - name: WaitForNodeReady
   reservationTimeout: 5m
 `, profile)
 	if out, err := kubectlApply(profileYAML); err != nil {
@@ -50,7 +50,7 @@ spec:
 
 	// --- Step 1: Pod A passthrough ---
 	// No capacity anywhere (kind nodes don't have fake.io/gpu, no inflight).
-	// WaitForScaleUp should release immediately (passthrough to trigger autoscaler).
+	// WaitForNodeReady should release immediately (passthrough to trigger autoscaler).
 	podA := "e2e-case001-pod-a"
 	defer cleanupPod(podA, "default")
 
@@ -164,7 +164,7 @@ spec:
 		t.Fatalf("create Pod B: %s", out)
 	}
 
-	// Pod B should stay gated (held by WaitForScaleUp on inflight node)
+	// Pod B should stay gated (held by WaitForNodeReady on inflight node)
 	waitFor(t, 15*time.Second, "Pod B gated", func() bool {
 		out, err := podField(podB, "default", "{.spec.schedulingGates[*].name}")
 		if err != nil {
@@ -176,7 +176,7 @@ spec:
 	// Verify held-by annotation
 	waitFor(t, 15*time.Second, "Pod B held-by annotation", func() bool {
 		out, _ := podField(podB, "default", "{.metadata.annotations.kompakt\\.io/held-by}")
-		return out == "WaitForScaleUp"
+		return out == "WaitForNodeReady"
 	})
 	t.Log("Step 3 OK: Pod B held on inflight node")
 

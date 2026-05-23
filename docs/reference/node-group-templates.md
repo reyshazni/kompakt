@@ -6,7 +6,7 @@ This page is the single reference for configuring `nodeGroupTemplates` in a Pack
 
 `nodeGroupTemplates` declare the expected capacity of nodes that do not yet exist. When the autoscaler is provisioning a new node, Kompakt cannot inspect its real resources (it has not joined the cluster yet). The template tells Kompakt what the node will have when it arrives.
 
-Without a template, Kompakt cannot match pending pods to in-flight nodes. The `WaitForScaleUp` rule requires at least one template to function.
+Without a template, Kompakt cannot match pending pods to in-flight nodes. The `WaitForNodeReady` rule requires at least one template to function.
 
 ## Schema
 
@@ -178,7 +178,7 @@ Kompakt matches in-flight nodes to templates by prefix. The first matching templ
 
 ## When templates are NOT needed
 
-- **`BinPackOnInflightCapacity` only profiles**: BinPack operates on existing nodes (already joined, real capacity visible). No template needed.
+- **`WaitForWorkloadPacking` only profiles**: BinPack operates on existing nodes (already joined, real capacity visible). No template needed.
 - **Static node pools (no autoscaling)**: If your nodes are always running, there are no in-flight nodes to track.
 
 ## Common mistakes

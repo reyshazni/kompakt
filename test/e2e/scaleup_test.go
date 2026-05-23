@@ -29,7 +29,7 @@ spec:
       - type: Ready
         status: "True"
   rules:
-    - name: WaitForScaleUp
+    - name: WaitForNodeReady
   reservationTimeout: %s
 `, name, timeout)
 	return kubectlApply(profile)
@@ -53,20 +53,20 @@ spec:
       - type: Ready
         status: "True"
   rules:
-    - name: BinPackOnInflightCapacity
-    - name: WaitForScaleUp
+    - name: WaitForWorkloadPacking
+    - name: WaitForNodeReady
   reservationTimeout: %s
 `, name, timeout)
 	return kubectlApply(profile)
 }
 
-// --- WaitForScaleUp gate injection ---
+// --- WaitForNodeReady gate injection ---
 
-// Webhook injects the correct gate name for WaitForScaleUp.
-// We verify via the gate-reason annotation because WaitForScaleUp passthrough
+// Webhook injects the correct gate name for WaitForNodeReady.
+// We verify via the gate-reason annotation because WaitForNodeReady passthrough
 // releases the gate almost instantly in kind (no inflight nodes).
-func TestWaitForScaleUp_GateName(t *testing.T) {
-	// Use BothRules profile so we can observe the awaiting-scale-up gate
+func TestWaitForNodeReady_GateName(t *testing.T) {
+	// Use BothRules profile so we can observe the wait-for-node-ready gate
 	// (BinPack holds huge pods, giving us time to inspect gates).
 	profile := "e2e-scaleup-gate"
 	if out, err := createBothRulesProfile(profile, "5m"); err != nil {
@@ -92,19 +92,19 @@ func TestWaitForScaleUp_GateName(t *testing.T) {
 	defer cleanupPod(podName, "default")
 
 	// Both gates should be present since BinPack holds
-	waitFor(t, 10*time.Second, "awaiting-scale-up gate injected", func() bool {
+	waitFor(t, 10*time.Second, "wait-for-node-ready gate injected", func() bool {
 		out, err := podField(podName, "default", "{.spec.schedulingGates[*].name}")
 		if err != nil {
 			return false
 		}
-		return strings.Contains(out, "kompakt.io/awaiting-scale-up")
+		return strings.Contains(out, "kompakt.io/wait-for-node-ready")
 	})
 }
 
-// --- WaitForScaleUp release behavior ---
+// --- WaitForNodeReady release behavior ---
 
-// WaitForScaleUp releases with node affinity when existing node has capacity.
-func TestWaitForScaleUp_ExistingCapacity_ReleasedWithAffinity(t *testing.T) {
+// WaitForNodeReady releases with node affinity when existing node has capacity.
+func TestWaitForNodeReady_ExistingCapacity_ReleasedWithAffinity(t *testing.T) {
 	profile := "e2e-scaleup-existing"
 	if out, err := createScaleUpProfile(profile); err != nil {
 		t.Fatalf("create profile: %s", out)
@@ -141,15 +141,15 @@ func TestWaitForScaleUp_ExistingCapacity_ReleasedWithAffinity(t *testing.T) {
 		t.Fatalf("failed to read node affinity: %s", out)
 	}
 	if !strings.Contains(out, "kubernetes.io/hostname") {
-		t.Fatalf("expected node affinity after WaitForScaleUp release, got: %s", out)
+		t.Fatalf("expected node affinity after WaitForNodeReady release, got: %s", out)
 	}
 }
 
-// WaitForScaleUp with no capacity anywhere should still release (passthrough).
+// WaitForNodeReady with no capacity anywhere should still release (passthrough).
 // In kind, nodes always exist, so "no capacity" = huge resource request.
 // The passthrough path fires when no node (existing or inflight) fits.
-// Since WaitForScaleUp has no inflight data in kind, huge pods passthrough.
-func TestWaitForScaleUp_NoCapacity_Passthrough(t *testing.T) {
+// Since WaitForNodeReady has no inflight data in kind, huge pods passthrough.
+func TestWaitForNodeReady_NoCapacity_Passthrough(t *testing.T) {
 	profile := "e2e-scaleup-passthrough"
 	if out, err := createScaleUpProfile(profile); err != nil {
 		t.Fatalf("create profile: %s", out)
@@ -173,7 +173,7 @@ func TestWaitForScaleUp_NoCapacity_Passthrough(t *testing.T) {
 	}
 	defer cleanupPod(podName, "default")
 
-	// WaitForScaleUp passthrough: no capacity anywhere, should release
+	// WaitForNodeReady passthrough: no capacity anywhere, should release
 	// immediately (so autoscaler can see it). No node affinity.
 	waitFor(t, 30*time.Second, "passthrough release", func() bool {
 		out, err := podField(podName, "default", "{.spec.schedulingGates}")
@@ -190,8 +190,8 @@ func TestWaitForScaleUp_NoCapacity_Passthrough(t *testing.T) {
 	}
 }
 
-// WaitForScaleUp timeout releases gate for pods that can never fit.
-func TestWaitForScaleUp_Timeout(t *testing.T) {
+// WaitForNodeReady timeout releases gate for pods that can never fit.
+func TestWaitForNodeReady_Timeout(t *testing.T) {
 	profile := "e2e-scaleup-timeout"
 	// Very short timeout so we don't wait long in e2e
 	if out, err := createScaleUpProfileWithTimeout(profile, "5s"); err != nil {
@@ -257,8 +257,8 @@ func TestBothRules_BothGatesInjected(t *testing.T) {
 		if err != nil {
 			return false
 		}
-		hasBinPack := strings.Contains(out, "kompakt.io/awaiting-bin-pack")
-		hasScaleUp := strings.Contains(out, "kompakt.io/awaiting-scale-up")
+		hasBinPack := strings.Contains(out, "kompakt.io/wait-for-workload-packing")
+		hasScaleUp := strings.Contains(out, "kompakt.io/wait-for-node-ready")
 		return hasBinPack && hasScaleUp
 	})
 }
@@ -344,7 +344,7 @@ func TestBothRules_PriorityHigh_Overrides(t *testing.T) {
 // --- Chaos: profile changes while pods are gated ---
 
 // Switching a profile's rules while pods are gated should not crash.
-func TestWaitForScaleUp_ProfileUpdateWhileGated(t *testing.T) {
+func TestWaitForNodeReady_ProfileUpdateWhileGated(t *testing.T) {
 	// Start with BinPack (holds huge pods), then switch to short timeout.
 	profile := "e2e-scaleup-update"
 	if out, err := createProfileWithTimeout(profile, "5m"); err != nil {
@@ -403,7 +403,7 @@ func TestWaitForScaleUp_ProfileUpdateWhileGated(t *testing.T) {
 }
 
 // Deleting a profile releases all gated pods (profile not found path).
-func TestWaitForScaleUp_ProfileDeleteReleasesGates(t *testing.T) {
+func TestWaitForNodeReady_ProfileDeleteReleasesGates(t *testing.T) {
 	// Use BinPack to hold huge pods, then delete the profile.
 	profile := "e2e-scaleup-delete"
 	if out, err := createProfileWithTimeout(profile, "5m"); err != nil {
@@ -448,10 +448,10 @@ func TestWaitForScaleUp_ProfileDeleteReleasesGates(t *testing.T) {
 	})
 }
 
-// --- Chaos: burst of pods with WaitForScaleUp ---
+// --- Chaos: burst of pods with WaitForNodeReady ---
 
-// Burst create multiple pods with WaitForScaleUp; all should be processed.
-func TestWaitForScaleUp_BurstCreation(t *testing.T) {
+// Burst create multiple pods with WaitForNodeReady; all should be processed.
+func TestWaitForNodeReady_BurstCreation(t *testing.T) {
 	profile := "e2e-scaleup-burst"
 	if out, err := createScaleUpProfile(profile); err != nil {
 		t.Fatalf("create profile: %s", out)
@@ -502,10 +502,10 @@ func TestWaitForScaleUp_BurstCreation(t *testing.T) {
 	}
 }
 
-// --- Chaos: controller restart with gated WaitForScaleUp pods ---
+// --- Chaos: controller restart with gated WaitForNodeReady pods ---
 
 // Controller restart should pick up existing gated pods and continue processing.
-func TestWaitForScaleUp_ControllerRestartRecovery(t *testing.T) {
+func TestWaitForNodeReady_ControllerRestartRecovery(t *testing.T) {
 	// Use BinPack to hold huge pods, then kill controller, then shorten timeout.
 	profile := "e2e-scaleup-restart"
 	if out, err := createProfileWithTimeout(profile, "5m"); err != nil {
@@ -582,7 +582,7 @@ func TestWaitForScaleUp_ControllerRestartRecovery(t *testing.T) {
 // --- Chaos: namespace deletion with gated pods ---
 
 // Deleting a namespace with gated pods should not crash the controller.
-func TestWaitForScaleUp_NamespaceDeletion(t *testing.T) {
+func TestWaitForNodeReady_NamespaceDeletion(t *testing.T) {
 	ns := "e2e-scaleup-ns-delete"
 	_, _ = kubectlApply(fmt.Sprintf(`
 apiVersion: v1

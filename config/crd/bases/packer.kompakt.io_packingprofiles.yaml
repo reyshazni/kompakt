@@ -249,8 +249,8 @@ spec:
                     name:
                       description: Name is the rule plugin name.
                       enum:
-                      - BinPackOnInflightCapacity
-                      - WaitForScaleUp
+                      - WaitForWorkloadPacking
+                      - WaitForNodeReady
                       - WaitForImagePrePull
                       - WaitForMIGProfile
                       - WaitForCoLocation

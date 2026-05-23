@@ -140,7 +140,7 @@ Use this to determine if Kompakt helps your specific problem:
    - Yes: Continue.
 
 2. Is the over-provisioning caused by pods arriving in separate autoscaler scan cycles?
-   - Yes: Kompakt's `WaitForScaleUp` rule directly solves this.
+   - Yes: Kompakt's `WaitForNodeReady` rule directly solves this.
    - Not sure: Check your autoscaler logs for multiple scale-up decisions within 1-5 minutes.
 
 3. Is the over-provisioning caused by device-plugin resources missing from node templates?

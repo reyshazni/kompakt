@@ -34,7 +34,7 @@ The autoscaler cannot solve this alone. Its "upcoming node" simulation depends o
 
 Kompakt sits between pod creation and the scheduler using scheduling gates (K8s 1.30+). A gated pod is invisible to both kube-scheduler and the autoscaler. Kompakt controls when each pod becomes visible.
 
-The `WaitForScaleUp` rule makes three decisions:
+The `WaitForNodeReady` rule makes three decisions:
 
 1. **No capacity anywhere** (no nodes, no in-flight nodes): release the gate immediately. The pod becomes visible to the autoscaler and triggers a scale-up.
 2. **In-flight node can fit**: hold the gate. The pod stays invisible, preventing a redundant scale-up.
@@ -82,7 +82,7 @@ spec:
     requiredLabels:
       - aliyun.accelerator/gpu-count
   rules:
-    - name: WaitForScaleUp
+    - name: WaitForNodeReady
   reservationTimeout: 5m
 ```
 
@@ -97,7 +97,7 @@ Before applying, replace these values with your own:
 Key fields explained:
 
 - **`nodeGroupTemplates`**: declares expected resources for incoming nodes. This is how Kompakt knows the node's capacity before it arrives.
-- **`WaitForScaleUp`**: the only rule needed for scale-from-zero. No BinPack rule because there are no existing nodes to pack onto.
+- **`WaitForNodeReady`**: the only rule needed for scale-from-zero. No BinPack rule because there are no existing nodes to pack onto.
 - **`requiredLabels`**: waits for the cGPU device plugin labels before considering the node ready. GPU nodes often reach `Ready=True` before the device plugin registers.
 
 Apply it:
@@ -159,9 +159,9 @@ Expected output during scale-up:
 ```
 NAME                  PHASE     GATES                            NODE
 jupyter-notebook-0    Pending   <none>                           <none>     # released, triggering scale-up
-jupyter-notebook-1    Pending   kompakt.io/awaiting-scale-up     <none>     # held, waiting for node
-jupyter-notebook-2    Pending   kompakt.io/awaiting-scale-up     <none>     # held
-jupyter-notebook-3    Pending   kompakt.io/awaiting-scale-up     <none>     # held
+jupyter-notebook-1    Pending   kompakt.io/wait-for-node-ready     <none>     # held, waiting for node
+jupyter-notebook-2    Pending   kompakt.io/wait-for-node-ready     <none>     # held
+jupyter-notebook-3    Pending   kompakt.io/wait-for-node-ready     <none>     # held
 ```
 
 After nodes arrive:
@@ -182,15 +182,15 @@ See the [Node Group Templates Reference](../reference/node-group-templates.md) f
 
 ## Adding BinPack for mixed scenarios
 
-If your GPU nodes sometimes have spare capacity (not always scale-from-zero), add `BinPackOnInflightCapacity` before `WaitForScaleUp`:
+If your GPU nodes sometimes have spare capacity (not always scale-from-zero), add `WaitForWorkloadPacking` before `WaitForNodeReady`:
 
 ```yaml
 rules:
-  - name: BinPackOnInflightCapacity
-  - name: WaitForScaleUp
+  - name: WaitForWorkloadPacking
+  - name: WaitForNodeReady
 ```
 
-BinPack runs first. If a pod fits on an existing node, it is released immediately with node affinity. If not, WaitForScaleUp takes over and coordinates the scale-up.
+BinPack runs first. If a pod fits on an existing node, it is released immediately with node affinity. If not, WaitForNodeReady takes over and coordinates the scale-up.
 
 ## NVIDIA device-plugin variant
 
@@ -218,7 +218,7 @@ spec:
       - type: Ready
         status: "True"
   rules:
-    - name: WaitForScaleUp
+    - name: WaitForNodeReady
   reservationTimeout: 5m
 ```
 

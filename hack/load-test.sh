@@ -41,7 +41,7 @@ spec:
       - type: Ready
         status: "True"
   rules:
-    - name: BinPackOnInflightCapacity
+    - name: WaitForWorkloadPacking
   reservationTimeout: 10m
 EOF
 

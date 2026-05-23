@@ -28,9 +28,9 @@ These are not bugs in the autoscaler. It makes the best decision it can with the
 
 Kompakt coordinates pods in two ways, depending on which rules you configure:
 
-**Pack onto existing capacity** (`BinPackOnInflightCapacity`): When your cluster has running nodes with spare capacity, Kompakt finds the best-fit node and releases the pod with node affinity. Minimizes wasted resources across existing nodes.
+**Pack onto existing capacity** (`WaitForWorkloadPacking`): When your cluster has running nodes with spare capacity, Kompakt finds the best-fit node and releases the pod with node affinity. Minimizes wasted resources across existing nodes.
 
-**Coordinate scale-ups** (`WaitForScaleUp`): When the cluster needs new nodes, Kompakt lets the first pod through to trigger the autoscaler, then holds subsequent pods until the new node is ready. Prevents the autoscaler from provisioning redundant nodes.
+**Coordinate scale-ups** (`WaitForNodeReady`): When the cluster needs new nodes, Kompakt lets the first pod through to trigger the autoscaler, then holds subsequent pods until the new node is ready. Prevents the autoscaler from provisioning redundant nodes.
 
 You can use one or both rules per profile. For most production clusters, both rules together provide the best results.
 

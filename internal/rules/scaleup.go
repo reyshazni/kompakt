@@ -10,27 +10,27 @@ import (
 )
 
 func init() {
-	Register(&WaitForScaleUp{})
+	Register(&WaitForNodeReady{})
 }
 
-var _ Rule = (*WaitForScaleUp)(nil)
+var _ Rule = (*WaitForNodeReady)(nil)
 
-// WaitForScaleUp coordinates pods during node scale-up events.
+// WaitForNodeReady coordinates pods during node scale-up events.
 // It prevents the cluster autoscaler from over-provisioning by controlling
 // pod visibility through three-state decision logic:
 //
 //  1. No capacity anywhere: release (passthrough to trigger autoscaler)
 //  2. In-flight node can fit: hold (wait for node to arrive)
 //  3. Existing node can fit: release with real node affinity
-type WaitForScaleUp struct{}
+type WaitForNodeReady struct{}
 
 // Name returns the rule plugin name.
-func (r *WaitForScaleUp) Name() string {
-	return "WaitForScaleUp"
+func (r *WaitForNodeReady) Name() string {
+	return "WaitForNodeReady"
 }
 
 // Evaluate decides whether the gate should be released for the given pod.
-func (r *WaitForScaleUp) Evaluate(
+func (r *WaitForNodeReady) Evaluate(
 	_ context.Context,
 	pod *corev1.Pod,
 	l *ledger.NodeLedger,

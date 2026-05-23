@@ -86,7 +86,7 @@ func TestLeaderElection_WebhookWorksDuringHA(t *testing.T) {
 			if err != nil {
 				return false
 			}
-			return strings.Contains(out, "kompakt.io/awaiting-bin-pack")
+			return strings.Contains(out, "kompakt.io/wait-for-workload-packing")
 		})
 	}
 }
@@ -212,7 +212,7 @@ func TestLeaderElection_GatedPodSurvivesFailover(t *testing.T) {
 		if err != nil {
 			return false
 		}
-		return strings.Contains(out, "kompakt.io/awaiting-bin-pack")
+		return strings.Contains(out, "kompakt.io/wait-for-workload-packing")
 	})
 
 	// Kill leader
@@ -239,7 +239,7 @@ func TestLeaderElection_GatedPodSurvivesFailover(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get pod after failover: %s", out)
 	}
-	if !strings.Contains(out, "kompakt.io/awaiting-bin-pack") {
+	if !strings.Contains(out, "kompakt.io/wait-for-workload-packing") {
 		t.Fatalf("gated pod lost its gates during failover, gates: %q", out)
 	}
 }
@@ -279,7 +279,7 @@ func TestLeaderElection_WebhookDuringLeaderDeath(t *testing.T) {
 		if err != nil {
 			return false
 		}
-		return strings.Contains(out, "kompakt.io/awaiting-bin-pack")
+		return strings.Contains(out, "kompakt.io/wait-for-workload-packing")
 	})
 }
 

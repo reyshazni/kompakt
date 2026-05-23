@@ -137,7 +137,7 @@ func TestRecreatePodAfterDeletion(t *testing.T) {
 		if err != nil {
 			return false
 		}
-		return strings.Contains(out, "kompakt.io/awaiting-bin-pack")
+		return strings.Contains(out, "kompakt.io/wait-for-workload-packing")
 	})
 }
 
@@ -228,7 +228,7 @@ spec:
 	if err != nil {
 		t.Fatalf("failed to get gates: %s", out)
 	}
-	gateCount := strings.Count(out, "kompakt.io/awaiting-bin-pack")
+	gateCount := strings.Count(out, "kompakt.io/wait-for-workload-packing")
 	if gateCount > 1 {
 		t.Fatalf("duplicate gates detected (count=%d), gates: %s", gateCount, out)
 	}

@@ -1,6 +1,6 @@
 # In-flight Node Detection
 
-Kompakt needs to know about nodes that are being provisioned but not yet Ready. This is how WaitForScaleUp avoids double-provisioning: if the autoscaler is already bringing up a node, Kompakt holds subsequent pods instead of letting the autoscaler provision another one.
+Kompakt needs to know about nodes that are being provisioned but not yet Ready. This is how WaitForNodeReady avoids double-provisioning: if the autoscaler is already bringing up a node, Kompakt holds subsequent pods instead of letting the autoscaler provision another one.
 
 ## Autoscaler-aware, not cloud-aware
 
@@ -96,8 +96,8 @@ Matching priority:
 1. `instanceType`: matched against the instance type from GOATScaler events
 2. `namePrefix`: matched against the node name from CA status
 
-Without templates, in-flight nodes have unknown capacity and WaitForScaleUp cannot hold pods for them.
+Without templates, in-flight nodes have unknown capacity and WaitForNodeReady cannot hold pods for them.
 
 ## Fallback behavior
 
-If neither layer detects in-flight nodes (e.g., the autoscaler is completely unknown and nodes appear instantly as Ready), WaitForScaleUp still works. It uses passthrough: the first pod is released immediately to trigger the autoscaler, subsequent pods are released when the node becomes Ready (detected as an existing node by the regular ledger sync). This is slower but still prevents over-provisioning through coordinated release.
+If neither layer detects in-flight nodes (e.g., the autoscaler is completely unknown and nodes appear instantly as Ready), WaitForNodeReady still works. It uses passthrough: the first pod is released immediately to trigger the autoscaler, subsequent pods are released when the node becomes Ready (detected as an existing node by the regular ledger sync). This is slower but still prevents over-provisioning through coordinated release.

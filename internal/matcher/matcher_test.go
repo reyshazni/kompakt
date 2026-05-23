@@ -38,7 +38,7 @@ func TestResolve_Found(t *testing.T) {
 			},
 			ReadinessSignal: v1alpha1.ReadinessSignal{},
 			Rules: []v1alpha1.RuleRef{
-				{Name: "BinPackOnInflightCapacity"},
+				{Name: "WaitForWorkloadPacking"},
 			},
 		},
 	}

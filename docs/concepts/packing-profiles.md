@@ -103,8 +103,8 @@ An ordered list of [rule plugins](rule-plugins.md) to run for matched pods:
 
 ```yaml
 rules:
-  - name: BinPackOnInflightCapacity
-  - name: WaitForScaleUp
+  - name: WaitForWorkloadPacking
+  - name: WaitForNodeReady
 ```
 
 Rules are executed in order. Each rule decides whether the pod's gate should be released. See [Rule Plugins](rule-plugins.md) for available rules.
@@ -173,8 +173,8 @@ kubectl get packingprofiles
 
 ```
 NAME                         DEMAND            RULES                        ACTIVE GATES   AGE
-general-cpu-coordination     ResourceRequest   BinPackOnInflightCapacity    12             1h
-alibaba-cgpu                 Annotation        BinPackOnInflightCapacity    3              1h
+general-cpu-coordination     ResourceRequest   WaitForWorkloadPacking    12             1h
+alibaba-cgpu                 Annotation        WaitForWorkloadPacking    3              1h
 ```
 
 The `ACTIVE GATES` column shows how many pods are currently gated by each profile.

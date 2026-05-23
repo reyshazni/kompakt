@@ -37,7 +37,7 @@ func TestPodGatingWithValidProfile(t *testing.T) {
 		if err != nil {
 			return false
 		}
-		return strings.Contains(out, "kompakt.io/awaiting-bin-pack")
+		return strings.Contains(out, "kompakt.io/wait-for-workload-packing")
 	})
 }
 
@@ -227,7 +227,7 @@ spec:
 		if err != nil {
 			return false
 		}
-		hasKompakt := strings.Contains(out, "kompakt.io/awaiting-bin-pack")
+		hasKompakt := strings.Contains(out, "kompakt.io/wait-for-workload-packing")
 		hasOther := strings.Contains(out, "some-other-system.io/custom-gate")
 		return hasKompakt && hasOther
 	})
@@ -275,7 +275,7 @@ metadata:
 		if err != nil {
 			return false
 		}
-		return strings.Contains(out, "kompakt.io/awaiting-bin-pack")
+		return strings.Contains(out, "kompakt.io/wait-for-workload-packing")
 	})
 }
 
@@ -345,7 +345,7 @@ spec:
 			if err != nil {
 				return false
 			}
-			return strings.Contains(out, "kompakt.io/awaiting-bin-pack")
+			return strings.Contains(out, "kompakt.io/wait-for-workload-packing")
 		})
 	}
 }

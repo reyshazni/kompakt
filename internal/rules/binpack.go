@@ -10,24 +10,24 @@ import (
 )
 
 func init() {
-	Register(&BinPackOnInflightCapacity{})
+	Register(&WaitForWorkloadPacking{})
 }
 
-var _ Rule = (*BinPackOnInflightCapacity)(nil)
+var _ Rule = (*WaitForWorkloadPacking)(nil)
 
-// BinPackOnInflightCapacity is the core rule for v0.1.
+// WaitForWorkloadPacking is the core rule for v0.1.
 // It extracts demand from the pod, finds a node with sufficient capacity
 // (existing or in-flight), reserves the capacity, and releases the gate.
-type BinPackOnInflightCapacity struct{}
+type WaitForWorkloadPacking struct{}
 
 // Name returns the rule plugin name.
-func (r *BinPackOnInflightCapacity) Name() string {
-	return "BinPackOnInflightCapacity"
+func (r *WaitForWorkloadPacking) Name() string {
+	return "WaitForWorkloadPacking"
 }
 
 // Evaluate checks if the pod can be placed on existing node capacity.
 // Only considers nodes that are already Ready, not in-flight nodes.
-func (r *BinPackOnInflightCapacity) Evaluate(
+func (r *WaitForWorkloadPacking) Evaluate(
 	_ context.Context,
 	pod *corev1.Pod,
 	l *ledger.NodeLedger,

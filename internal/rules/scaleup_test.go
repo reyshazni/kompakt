@@ -10,11 +10,11 @@ import (
 	"github.com/reyshazni/kompakt/internal/ledger"
 )
 
-func TestWaitForScaleUp_NoCapacity_Passthrough(t *testing.T) {
+func TestWaitForNodeReady_NoCapacity_Passthrough(t *testing.T) {
 	// No nodes, no inflight. First pod must pass through to trigger autoscaler.
 	l := ledger.New()
 
-	rule := &WaitForScaleUp{}
+	rule := &WaitForNodeReady{}
 	release, nodeName, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -27,12 +27,12 @@ func TestWaitForScaleUp_NoCapacity_Passthrough(t *testing.T) {
 	}
 }
 
-func TestWaitForScaleUp_InflightFits_Hold(t *testing.T) {
+func TestWaitForNodeReady_InflightFits_Hold(t *testing.T) {
 	// Inflight node can fit the pod. Hold the gate to prevent redundant scale-up.
 	l := ledger.New()
 	l.AddInflightNode("pool-gpu-pending-0", map[string]int64{"cpu": 4000}, nil, nil)
 
-	rule := &WaitForScaleUp{}
+	rule := &WaitForNodeReady{}
 	release, _, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -42,12 +42,12 @@ func TestWaitForScaleUp_InflightFits_Hold(t *testing.T) {
 	}
 }
 
-func TestWaitForScaleUp_ExistingFits_Release(t *testing.T) {
+func TestWaitForNodeReady_ExistingFits_Release(t *testing.T) {
 	// Existing node has capacity. Release with real node name for affinity.
 	l := ledger.New()
 	l.AddNode("cn-jakarta.172.16.1.10", map[string]int64{"cpu": 4000}, nil, nil)
 
-	rule := &WaitForScaleUp{}
+	rule := &WaitForNodeReady{}
 	release, nodeName, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -60,7 +60,7 @@ func TestWaitForScaleUp_ExistingFits_Release(t *testing.T) {
 	}
 }
 
-func TestWaitForScaleUp_EmptyDemand_Release(t *testing.T) {
+func TestWaitForNodeReady_EmptyDemand_Release(t *testing.T) {
 	// Pod with no resource requests should release immediately.
 	l := ledger.New()
 
@@ -71,7 +71,7 @@ func TestWaitForScaleUp_EmptyDemand_Release(t *testing.T) {
 		},
 	}
 
-	rule := &WaitForScaleUp{}
+	rule := &WaitForNodeReady{}
 	release, nodeName, err := rule.Evaluate(context.Background(), pod, l, cpuProfile())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -84,13 +84,13 @@ func TestWaitForScaleUp_EmptyDemand_Release(t *testing.T) {
 	}
 }
 
-func TestWaitForScaleUp_ReservationOnInflight(t *testing.T) {
+func TestWaitForNodeReady_ReservationOnInflight(t *testing.T) {
 	// After holding for an inflight node, capacity should be reserved.
 	// Second pod with same demand should see reduced capacity.
 	l := ledger.New()
 	l.AddInflightNode("pool-gpu-pending-0", map[string]int64{"cpu": 3000}, nil, nil)
 
-	rule := &WaitForScaleUp{}
+	rule := &WaitForNodeReady{}
 	profile := cpuProfile()
 
 	// First pod: 2000m, inflight has 3000m. Hold + reserve.
@@ -112,12 +112,12 @@ func TestWaitForScaleUp_ReservationOnInflight(t *testing.T) {
 	}
 }
 
-func TestWaitForScaleUp_ReservationOnExisting(t *testing.T) {
+func TestWaitForNodeReady_ReservationOnExisting(t *testing.T) {
 	// Release on existing node should also reserve capacity.
 	l := ledger.New()
 	l.AddNode("node-1", map[string]int64{"cpu": 3000}, nil, nil)
 
-	rule := &WaitForScaleUp{}
+	rule := &WaitForNodeReady{}
 	profile := cpuProfile()
 
 	// First pod: 2000m, existing has 3000m. Release + reserve.
@@ -136,13 +136,13 @@ func TestWaitForScaleUp_ReservationOnExisting(t *testing.T) {
 	}
 }
 
-func TestWaitForScaleUp_ExistingPreferredOverInflight(t *testing.T) {
+func TestWaitForNodeReady_ExistingPreferredOverInflight(t *testing.T) {
 	// When both existing and inflight fit with same slack, prefer existing (release > hold).
 	l := ledger.New()
 	l.AddNode("existing", map[string]int64{"cpu": 2000}, nil, nil)
 	l.AddInflightNode("inflight", map[string]int64{"cpu": 2000}, nil, nil)
 
-	rule := &WaitForScaleUp{}
+	rule := &WaitForNodeReady{}
 	release, nodeName, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -155,27 +155,27 @@ func TestWaitForScaleUp_ExistingPreferredOverInflight(t *testing.T) {
 	}
 }
 
-func TestWaitForScaleUp_Registered(t *testing.T) {
-	_, ok := Registry["WaitForScaleUp"]
+func TestWaitForNodeReady_Registered(t *testing.T) {
+	_, ok := Registry["WaitForNodeReady"]
 	if !ok {
-		t.Fatal("WaitForScaleUp not registered in global registry")
+		t.Fatal("WaitForNodeReady not registered in global registry")
 	}
 }
 
-func TestWaitForScaleUpName(t *testing.T) {
-	rule := &WaitForScaleUp{}
-	if rule.Name() != "WaitForScaleUp" {
-		t.Fatalf("expected WaitForScaleUp, got %s", rule.Name())
+func TestWaitForNodeReadyName(t *testing.T) {
+	rule := &WaitForNodeReady{}
+	if rule.Name() != "WaitForNodeReady" {
+		t.Fatalf("expected WaitForNodeReady, got %s", rule.Name())
 	}
 }
 
-func TestWaitForScaleUp_Layer1SignalOnly_Hold(t *testing.T) {
+func TestWaitForNodeReady_Layer1SignalOnly_Hold(t *testing.T) {
 	// Layer 1 detected inflight node but with empty allocatable (no capacity data yet).
-	// WaitForScaleUp should HOLD (not passthrough) because a node is coming.
+	// WaitForNodeReady should HOLD (not passthrough) because a node is coming.
 	l := ledger.New()
 	l.AddInflightNode("test-cpu/asa-xyz", map[string]int64{}, nil, nil)
 
-	rule := &WaitForScaleUp{}
+	rule := &WaitForNodeReady{}
 	release, _, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -185,12 +185,12 @@ func TestWaitForScaleUp_Layer1SignalOnly_Hold(t *testing.T) {
 	}
 }
 
-func TestWaitForScaleUp_Layer2WithCapacity_Hold(t *testing.T) {
+func TestWaitForNodeReady_Layer2WithCapacity_Hold(t *testing.T) {
 	// Layer 2 NotReady node with real allocatable. Pod fits. Hold.
 	l := ledger.New()
 	l.AddInflightNode("notready/gpu-node", map[string]int64{"cpu": 4000}, nil, nil)
 
-	rule := &WaitForScaleUp{}
+	rule := &WaitForNodeReady{}
 	release, _, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -200,12 +200,12 @@ func TestWaitForScaleUp_Layer2WithCapacity_Hold(t *testing.T) {
 	}
 }
 
-func TestWaitForScaleUp_Layer2WithCapacity_DoesntFit_Passthrough(t *testing.T) {
+func TestWaitForNodeReady_Layer2WithCapacity_DoesntFit_Passthrough(t *testing.T) {
 	// Layer 2 NotReady node with real allocatable but pod doesn't fit. Passthrough.
 	l := ledger.New()
 	l.AddInflightNode("notready/gpu-node", map[string]int64{"cpu": 500}, nil, nil)
 
-	rule := &WaitForScaleUp{}
+	rule := &WaitForNodeReady{}
 	release, _, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

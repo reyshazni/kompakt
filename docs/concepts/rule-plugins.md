@@ -16,12 +16,12 @@ Rules are configured per PackingProfile:
 ```yaml
 spec:
   rules:
-    - name: BinPackOnInflightCapacity
+    - name: WaitForWorkloadPacking
 ```
 
 ## Available rules
 
-### BinPackOnInflightCapacity
+### WaitForWorkloadPacking
 
 **Available since**: v0.1
 
@@ -37,9 +37,9 @@ The algorithm:
 
 This rule handles both CPU/memory and fractional GPU workloads. The demand and capacity sources determine what resources are considered.
 
-**Gate name**: `kompakt.io/awaiting-bin-pack`
+**Gate name**: `kompakt.io/wait-for-workload-packing`
 
-### WaitForScaleUp
+### WaitForNodeReady
 
 **Available since**: v0.1
 
@@ -65,7 +65,7 @@ capacitySource:
         aliyun.com/gpu-mem: 49152
 ```
 
-**Gate name**: `kompakt.io/awaiting-scale-up`
+**Gate name**: `kompakt.io/wait-for-node-ready`
 
 ## Multiple rules
 
@@ -74,17 +74,17 @@ A profile can specify multiple rules. They execute in order, and all must agree 
 ```yaml
 spec:
   rules:
-    - name: BinPackOnInflightCapacity
-    - name: WaitForScaleUp
+    - name: WaitForWorkloadPacking
+    - name: WaitForNodeReady
 ```
 
-In this example, BinPack runs first. If an existing node has capacity, the pod is released immediately. If not, WaitForScaleUp evaluates next: passthrough if nothing is coming, hold if an in-flight node can fit.
+In this example, BinPack runs first. If an existing node has capacity, the pod is released immediately. If not, WaitForNodeReady evaluates next: passthrough if nothing is coming, hold if an in-flight node can fit.
 
 The gate names for each rule are injected independently, so you can see which rule is still holding a pod:
 
 ```bash
 kubectl get pod my-pod -o jsonpath='{.spec.schedulingGates[*].name}'
-# kompakt.io/awaiting-bin-pack kompakt.io/awaiting-scale-up
+# kompakt.io/wait-for-workload-packing kompakt.io/wait-for-node-ready
 ```
 
 As each rule is satisfied, its gate is removed. The pod schedules once all gates are gone.
@@ -95,8 +95,8 @@ All Kompakt gates use the `kompakt.io/` prefix:
 
 | Gate name | Rule |
 |---|---|
-| `kompakt.io/awaiting-bin-pack` | BinPackOnInflightCapacity |
-| `kompakt.io/awaiting-scale-up` | WaitForScaleUp |
+| `kompakt.io/wait-for-workload-packing` | WaitForWorkloadPacking |
+| `kompakt.io/wait-for-node-ready` | WaitForNodeReady |
 
 This makes it easy to identify which Kompakt rule is holding each pod.
 

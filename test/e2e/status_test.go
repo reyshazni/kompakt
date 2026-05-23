@@ -232,7 +232,7 @@ func TestAnnotationSetOnHold(t *testing.T) {
 		if err != nil {
 			return false
 		}
-		return out == "BinPackOnInflightCapacity"
+		return out == "WaitForWorkloadPacking"
 	})
 }
 
@@ -371,7 +371,7 @@ func TestProfileStatusConditions_AllTrue(t *testing.T) {
 	}
 }
 
-// WaitForScaleUp without nodeGroupTemplates shows ProfileValid=False.
+// WaitForNodeReady without nodeGroupTemplates shows ProfileValid=False.
 func TestProfileStatusConditions_MisconfiguredProfile(t *testing.T) {
 	profile := "e2e-status-misconfig"
 	if out, err := createScaleUpProfile(profile); err != nil {
@@ -397,7 +397,7 @@ func TestProfileStatusConditions_MisconfiguredProfile(t *testing.T) {
 	}
 	defer cleanupPod(podName, "default")
 
-	// WaitForScaleUp without nodeGroupTemplates = ProfileValid=False
+	// WaitForNodeReady without nodeGroupTemplates = ProfileValid=False
 	waitFor(t, 30*time.Second, "ProfileValid=False", func() bool {
 		out, _ := kubectl("get", "packingprofile", profile,
 			"-o", "jsonpath={.status.conditions[?(@.type==\"ProfileValid\")].status}")

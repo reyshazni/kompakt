@@ -24,8 +24,8 @@ Kompakt has two rules for CPU/memory workloads. You can use one or both dependin
 
 | Scenario | Rules | Why |
 |---|---|---|
-| Cluster has spare capacity, pods just need packing | `BinPackOnInflightCapacity` only | No scale-up involved, just fit pods onto existing nodes |
-| Scale-up expected, want to prevent over-provisioning | `WaitForScaleUp` only | Let first pod trigger scale-up, hold the rest until node arrives |
+| Cluster has spare capacity, pods just need packing | `WaitForWorkloadPacking` only | No scale-up involved, just fit pods onto existing nodes |
+| Scale-up expected, want to prevent over-provisioning | `WaitForNodeReady` only | Let first pod trigger scale-up, hold the rest until node arrives |
 | Both: pack onto existing, coordinate during scale-up | Both rules together | Most common setup for mixed clusters |
 
 ### BinPack only
@@ -49,11 +49,11 @@ spec:
       - type: Ready
         status: "True"
   rules:
-    - name: BinPackOnInflightCapacity
+    - name: WaitForWorkloadPacking
   reservationTimeout: 3m
 ```
 
-### WaitForScaleUp only
+### WaitForNodeReady only
 
 Use when your node pool scales from zero or near-zero and you want to prevent redundant node provisioning. The first pod passes through to trigger the autoscaler, subsequent pods wait for the incoming node.
 
@@ -79,7 +79,7 @@ spec:
       - type: Ready
         status: "True"
   rules:
-    - name: WaitForScaleUp
+    - name: WaitForNodeReady
   reservationTimeout: 3m
 ```
 
@@ -87,7 +87,7 @@ spec:
 
 ### Both rules together
 
-The most common setup. Pods first try to fit on existing capacity (BinPack). If nothing fits, WaitForScaleUp takes over: the first pod triggers the autoscaler, the rest wait.
+The most common setup. Pods first try to fit on existing capacity (BinPack). If nothing fits, WaitForNodeReady takes over: the first pod triggers the autoscaler, the rest wait.
 
 ```yaml
 apiVersion: packer.kompakt.io/v1alpha1
@@ -111,12 +111,12 @@ spec:
       - type: Ready
         status: "True"
   rules:
-    - name: BinPackOnInflightCapacity
-    - name: WaitForScaleUp
+    - name: WaitForWorkloadPacking
+    - name: WaitForNodeReady
   reservationTimeout: 3m
 ```
 
-Rules execute in order. BinPack runs first. If it finds a fit on an existing node, the gate is released immediately. If not, WaitForScaleUp evaluates next.
+Rules execute in order. BinPack runs first. If it finds a fit on an existing node, the gate is released immediately. If not, WaitForNodeReady evaluates next.
 
 ## Setup
 
@@ -211,7 +211,7 @@ spec:
       - type: Ready
         status: "True"
   rules:
-    - name: BinPackOnInflightCapacity
+    - name: WaitForWorkloadPacking
   reservationTimeout: 30s
 ---
 # Longer timeout for batch/background services
@@ -236,8 +236,8 @@ spec:
       - type: Ready
         status: "True"
   rules:
-    - name: BinPackOnInflightCapacity
-    - name: WaitForScaleUp
+    - name: WaitForWorkloadPacking
+    - name: WaitForNodeReady
   reservationTimeout: 5m
 ```
 

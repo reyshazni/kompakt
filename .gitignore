@@ -55,11 +55,12 @@ __pycache__/
 .env.*
 
 # AI
-.claude/
+.claude
 .claude.*
 CLAUDE.md
+AGENTS.md
 .cursorrules
-.cursor/
+.cursor
 .copilot/
 .aider*
 .continue/

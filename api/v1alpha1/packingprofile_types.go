@@ -147,7 +147,7 @@ type NodeConditionRequirement struct {
 // RuleRef references a rule plugin by name.
 type RuleRef struct {
 	// Name is the rule plugin name.
-	// +kubebuilder:validation:Enum=BinPackOnInflightCapacity;WaitForScaleUp;WaitForImagePrePull;WaitForMIGProfile;WaitForCoLocation
+	// +kubebuilder:validation:Enum=WaitForWorkloadPacking;WaitForNodeReady;WaitForImagePrePull;WaitForMIGProfile;WaitForCoLocation
 	Name string `json:"name"`
 }
 

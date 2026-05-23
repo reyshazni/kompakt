@@ -34,8 +34,8 @@ Kompakt does not install or manage GPU device plugins. It reads the resource req
 
 | Scenario | Rules | Why |
 |---|---|---|
-| GPU nodes already running, pack more pods onto them | `BinPackOnInflightCapacity` only | Fit pods onto existing GPU capacity, no scale-up involved |
-| Scale-from-zero GPU, prevent double provisioning | `WaitForScaleUp` only | See [Scale-from-zero GPU guide](scale-from-zero-gpu.md) |
+| GPU nodes already running, pack more pods onto them | `WaitForWorkloadPacking` only | Fit pods onto existing GPU capacity, no scale-up involved |
+| Scale-from-zero GPU, prevent double provisioning | `WaitForNodeReady` only | See [Scale-from-zero GPU guide](scale-from-zero-gpu.md) |
 | Mixed: some GPU nodes exist, also expect scale-ups | Both rules together | Pack onto existing nodes first, coordinate new nodes second |
 
 For the common GPU notebook/inference scenario where your GPU node pool scales from zero, see the dedicated [Scale-from-zero GPU guide](scale-from-zero-gpu.md).
@@ -68,8 +68,8 @@ spec:
       - type: Ready
         status: "True"
   rules:
-    - name: BinPackOnInflightCapacity
-    - name: WaitForScaleUp
+    - name: WaitForWorkloadPacking
+    - name: WaitForNodeReady
   reservationTimeout: 5m
 ```
 
@@ -136,8 +136,8 @@ spec:
     requiredLabels:
       - aliyun.accelerator/gpu-count
   rules:
-    - name: BinPackOnInflightCapacity
-    - name: WaitForScaleUp
+    - name: WaitForWorkloadPacking
+    - name: WaitForNodeReady
   reservationTimeout: 5m
 ```
 
@@ -193,11 +193,11 @@ spec:
       - type: Ready
         status: "True"
   rules:
-    - name: BinPackOnInflightCapacity
+    - name: WaitForWorkloadPacking
   reservationTimeout: 1m
 ```
 
-No `nodeGroupTemplates` needed since there are no in-flight nodes to track. No `WaitForScaleUp` rule needed since no scale-up is expected.
+No `nodeGroupTemplates` needed since there are no in-flight nodes to track. No `WaitForNodeReady` rule needed since no scale-up is expected.
 
 ## Finding your nodeGroupTemplate values
 

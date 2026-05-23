@@ -50,7 +50,7 @@ func testProfile() *v1alpha1.PackingProfile {
 			},
 			ReadinessSignal: v1alpha1.ReadinessSignal{},
 			Rules: []v1alpha1.RuleRef{
-				{Name: "BinPackOnInflightCapacity"},
+				{Name: "WaitForWorkloadPacking"},
 			},
 		},
 	}
@@ -241,7 +241,7 @@ func TestHandle_PreExistingGatesPreserved(t *testing.T) {
 	// Pre-existing gate is in the original pod, it will be in the patched
 	// result even if not in the patch itself. The key assertion is that
 	// the kompakt gate was added.
-	if !allGates["kompakt.io/awaiting-bin-pack"] {
+	if !allGates["kompakt.io/wait-for-workload-packing"] {
 		t.Fatal("kompakt gate should be injected")
 	}
 	// Also verify that the patch preserves existing gates by checking
@@ -369,7 +369,7 @@ func TestHandle_MultipleRules_MultipleGates(t *testing.T) {
 				Resources: []string{"cpu"},
 			},
 			Rules: []v1alpha1.RuleRef{
-				{Name: "BinPackOnInflightCapacity"},
+				{Name: "WaitForWorkloadPacking"},
 				{Name: "WaitForImagePrePull"},
 			},
 		},
@@ -411,8 +411,8 @@ func TestHandle_MultipleRules_MultipleGates(t *testing.T) {
 	for _, g := range gates {
 		gateSet[g.Name] = true
 	}
-	if !gateSet["kompakt.io/awaiting-bin-pack"] {
-		t.Fatal("expected awaiting-bin-pack gate")
+	if !gateSet["kompakt.io/wait-for-workload-packing"] {
+		t.Fatal("expected wait-for-workload-packing gate")
 	}
 	if !gateSet["kompakt.io/awaiting-image-prepull"] {
 		t.Fatal("expected awaiting-image-prepull gate")
@@ -463,7 +463,7 @@ func TestHandle_ExcludeLabel_NonTrueValue(t *testing.T) {
 	}
 }
 
-func TestHandle_WaitForScaleUp_GateInjected(t *testing.T) {
+func TestHandle_WaitForNodeReady_GateInjected(t *testing.T) {
 	profile := &v1alpha1.PackingProfile{
 		ObjectMeta: metav1.ObjectMeta{Name: "scaleup-profile"},
 		Spec: v1alpha1.PackingProfileSpec{
@@ -472,7 +472,7 @@ func TestHandle_WaitForScaleUp_GateInjected(t *testing.T) {
 				Resources: []string{"cpu"},
 			},
 			Rules: []v1alpha1.RuleRef{
-				{Name: "WaitForScaleUp"},
+				{Name: "WaitForNodeReady"},
 			},
 		},
 	}
@@ -493,7 +493,7 @@ func TestHandle_WaitForScaleUp_GateInjected(t *testing.T) {
 		t.Fatalf("expected allowed, got denied: %s", resp.Result.Message)
 	}
 	if len(resp.Patches) == 0 {
-		t.Fatal("expected patches for WaitForScaleUp gate injection")
+		t.Fatal("expected patches for WaitForNodeReady gate injection")
 	}
 
 	// Check that the correct gate name is in the patch
@@ -509,7 +509,7 @@ func TestHandle_WaitForScaleUp_GateInjected(t *testing.T) {
 	if len(gates) != 1 {
 		t.Fatalf("expected 1 gate, got %d", len(gates))
 	}
-	if gates[0].Name != "kompakt.io/awaiting-scale-up" {
-		t.Fatalf("expected kompakt.io/awaiting-scale-up, got %s", gates[0].Name)
+	if gates[0].Name != "kompakt.io/wait-for-node-ready" {
+		t.Fatalf("expected kompakt.io/wait-for-node-ready, got %s", gates[0].Name)
 	}
 }

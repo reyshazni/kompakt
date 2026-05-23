@@ -65,7 +65,7 @@ spec:
       - type: Ready
         status: "True"
   rules:
-    - name: BinPackOnInflightCapacity
+    - name: WaitForWorkloadPacking
   reservationTimeout: %s
 `, name, timeout)
 	return kubectlApply(profile)

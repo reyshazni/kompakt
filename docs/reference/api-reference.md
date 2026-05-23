@@ -32,7 +32,7 @@ spec:
         status: "True"
     requiredLabels: []
   rules:
-    - name: BinPackOnInflightCapacity
+    - name: WaitForWorkloadPacking
   reservationTimeout: 3m
 ```
 
@@ -119,7 +119,7 @@ capacitySource:
 | `namePrefix` | string | Yes | Node group name prefix to match against in-flight node names |
 | `allocatable` | map[string]int64 | Yes | Expected allocatable resources in millivalue |
 
-Used by the `WaitForScaleUp` rule to populate capacity on in-flight nodes detected from the cluster autoscaler. Without templates, in-flight nodes have unknown capacity.
+Used by the `WaitForNodeReady` rule to populate capacity on in-flight nodes detected from the cluster autoscaler. Without templates, in-flight nodes have unknown capacity.
 
 ```yaml
 capacitySource:
@@ -171,8 +171,8 @@ Allowed values:
 
 | Name | Version | Gate name |
 |---|---|---|
-| `BinPackOnInflightCapacity` | v0.1 | `kompakt.io/awaiting-bin-pack` |
-| `WaitForScaleUp` | v0.1 | `kompakt.io/awaiting-scale-up` |
+| `WaitForWorkloadPacking` | v0.1 | `kompakt.io/wait-for-workload-packing` |
+| `WaitForNodeReady` | v0.1 | `kompakt.io/wait-for-node-ready` |
 
 Planned for future releases: `WaitForImagePrePull` (v0.2), `WaitForMIGProfile` (v0.3), `WaitForCoLocation` (v0.3).
 
@@ -195,7 +195,7 @@ Planned for future releases: `WaitForImagePrePull` (v0.2), `WaitForMIGProfile` (
 | `kompakt.io/trace-id` | Annotation | Set by webhook. 8-char ID for log correlation. |
 | `kompakt.io/gate-reason` | Annotation | Set by controller on release. Values: `capacity`, `timeout`, `priority`, `profile_not_found`. |
 | `kompakt.io/target-node` | Annotation | Set by controller on release with node affinity. The real node hostname. |
-| `kompakt.io/held-by` | Annotation | Set by controller while gated. The rule name currently holding (e.g., `WaitForScaleUp`). Removed on release. |
+| `kompakt.io/held-by` | Annotation | Set by controller while gated. The rule name currently holding (e.g., `WaitForNodeReady`). Removed on release. |
 
 ## kubectl examples
 

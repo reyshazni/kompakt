@@ -19,7 +19,7 @@ import (
 	v1alpha1 "github.com/reyshazni/kompakt/api/v1alpha1"
 	"github.com/reyshazni/kompakt/internal/inflight"
 	"github.com/reyshazni/kompakt/internal/ledger"
-	_ "github.com/reyshazni/kompakt/internal/rules" // register BinPackOnInflightCapacity
+	_ "github.com/reyshazni/kompakt/internal/rules" // register WaitForWorkloadPacking
 )
 
 // fakeDetector returns a fixed list of inflight nodes.
@@ -53,7 +53,7 @@ func testProfile() *v1alpha1.PackingProfile {
 			},
 			ReadinessSignal: v1alpha1.ReadinessSignal{},
 			Rules: []v1alpha1.RuleRef{
-				{Name: "BinPackOnInflightCapacity"},
+				{Name: "WaitForWorkloadPacking"},
 			},
 			ReservationTimeout: "3m",
 		},
@@ -70,7 +70,7 @@ func gatedPod(name string, milliCPU int64) *corev1.Pod {
 		},
 		Spec: corev1.PodSpec{
 			SchedulingGates: []corev1.PodSchedulingGate{
-				{Name: "kompakt.io/awaiting-bin-pack"},
+				{Name: "kompakt.io/wait-for-workload-packing"},
 			},
 			Containers: []corev1.Container{
 				{
@@ -409,7 +409,7 @@ func TestReconcile_PodWithNoProfileLabel(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "no-label", Namespace: "default"},
 		Spec: corev1.PodSpec{
 			SchedulingGates: []corev1.PodSchedulingGate{
-				{Name: "kompakt.io/awaiting-bin-pack"},
+				{Name: "kompakt.io/wait-for-workload-packing"},
 			},
 			Containers: []corev1.Container{{Name: "app"}},
 		},
@@ -494,7 +494,7 @@ func TestHasKompaktGates(t *testing.T) {
 	}{
 		{"no gates", nil, false},
 		{"empty gates", []corev1.PodSchedulingGate{}, false},
-		{"kompakt gate", []corev1.PodSchedulingGate{{Name: "kompakt.io/awaiting-bin-pack"}}, true},
+		{"kompakt gate", []corev1.PodSchedulingGate{{Name: "kompakt.io/wait-for-workload-packing"}}, true},
 		{"other gate only", []corev1.PodSchedulingGate{{Name: "other.io/gate"}}, false},
 		{"mixed gates", []corev1.PodSchedulingGate{
 			{Name: "other.io/gate"},
@@ -538,9 +538,9 @@ func TestReconcile_UnknownRuleName_Skipped(t *testing.T) {
 	}
 }
 
-func TestReconcile_InflightNodeEnrichedFromTemplate_WaitForScaleUp(t *testing.T) {
-	// WaitForScaleUp with enriched inflight node: pod fits on inflight -> hold gate.
-	// This verifies template enrichment works with WaitForScaleUp (hold, not release).
+func TestReconcile_InflightNodeEnrichedFromTemplate_WaitForNodeReady(t *testing.T) {
+	// WaitForNodeReady with enriched inflight node: pod fits on inflight -> hold gate.
+	// This verifies template enrichment works with WaitForNodeReady (hold, not release).
 	pod := scaleUpGatedPod("gpu-pod", 1000)
 	profile := scaleUpProfile()
 	profile.Spec.CapacitySource.NodeGroupTemplates = []v1alpha1.NodeGroupTemplate{
@@ -564,7 +564,7 @@ func TestReconcile_InflightNodeEnrichedFromTemplate_WaitForScaleUp(t *testing.T)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// WaitForScaleUp holds when inflight fits
+	// WaitForNodeReady holds when inflight fits
 	if result.RequeueAfter != time.Second {
 		t.Fatalf("expected requeue (hold on inflight), got %v", result.RequeueAfter)
 	}
@@ -574,7 +574,7 @@ func TestReconcile_InflightNodeEnrichedFromTemplate_WaitForScaleUp(t *testing.T)
 		t.Fatalf("failed to get pod: %v", err)
 	}
 	if !hasKompaktGates(updated) {
-		t.Fatal("expected gates to stay (WaitForScaleUp holds on inflight)")
+		t.Fatal("expected gates to stay (WaitForNodeReady holds on inflight)")
 	}
 }
 
@@ -631,7 +631,7 @@ func scaleUpProfile() *v1alpha1.PackingProfile {
 			},
 			ReadinessSignal: v1alpha1.ReadinessSignal{},
 			Rules: []v1alpha1.RuleRef{
-				{Name: "WaitForScaleUp"},
+				{Name: "WaitForNodeReady"},
 			},
 			ReservationTimeout: "3m",
 		},
@@ -642,12 +642,12 @@ func scaleUpGatedPod(name string, milliCPU int64) *corev1.Pod {
 	pod := gatedPod(name, milliCPU)
 	pod.Labels[labelProfile] = "test-scaleup"
 	pod.Spec.SchedulingGates = []corev1.PodSchedulingGate{
-		{Name: "kompakt.io/awaiting-scale-up"},
+		{Name: "kompakt.io/wait-for-node-ready"},
 	}
 	return pod
 }
 
-func TestReconcile_WaitForScaleUp_Passthrough(t *testing.T) {
+func TestReconcile_WaitForNodeReady_Passthrough(t *testing.T) {
 	// No nodes, no inflight. Pod should be released (passthrough) to trigger autoscaler.
 	pod := scaleUpGatedPod("first-pod", 1000)
 	profile := scaleUpProfile()
@@ -676,7 +676,7 @@ func TestReconcile_WaitForScaleUp_Passthrough(t *testing.T) {
 	}
 }
 
-func TestReconcile_WaitForScaleUp_HoldOnInflight(t *testing.T) {
+func TestReconcile_WaitForNodeReady_HoldOnInflight(t *testing.T) {
 	// Inflight node can fit. Pod should stay gated.
 	pod := scaleUpGatedPod("second-pod", 1000)
 	profile := scaleUpProfile()
@@ -711,7 +711,7 @@ func TestReconcile_WaitForScaleUp_HoldOnInflight(t *testing.T) {
 	}
 }
 
-func TestReconcile_WaitForScaleUp_ReleaseWithAffinity(t *testing.T) {
+func TestReconcile_WaitForNodeReady_ReleaseWithAffinity(t *testing.T) {
 	// Existing node has capacity. Pod should be released with real node affinity.
 	pod := scaleUpGatedPod("ready-pod", 1000)
 	node := testNode("cn-jakarta.172.16.1.10", 4000)
@@ -812,10 +812,10 @@ func TestStatus_ProfileValid_False_MissingResources(t *testing.T) {
 	}
 }
 
-func TestStatus_ProfileValid_False_WaitForScaleUpNoTemplates(t *testing.T) {
+func TestStatus_ProfileValid_False_WaitForNodeReadyNoTemplates(t *testing.T) {
 	pod := scaleUpGatedPod("pod-1", 1000)
 	profile := scaleUpProfile()
-	// WaitForScaleUp but no nodeGroupTemplates
+	// WaitForNodeReady but no nodeGroupTemplates
 
 	r, fc := setupReconciler(pod, profile)
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "pod-1", Namespace: "default"}}
@@ -833,7 +833,7 @@ func TestStatus_ProfileValid_False_WaitForScaleUpNoTemplates(t *testing.T) {
 		t.Fatal("expected ProfileValid condition")
 	}
 	if cond.Status != metav1.ConditionFalse {
-		t.Fatalf("expected ProfileValid=False for WaitForScaleUp without templates, got %s", cond.Status)
+		t.Fatalf("expected ProfileValid=False for WaitForNodeReady without templates, got %s", cond.Status)
 	}
 }
 
