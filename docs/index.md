@@ -7,41 +7,45 @@ description: Kompakt is a Kubernetes admission-time coordinator that prevents cl
 
 **Keep your cluster compact.**
 
-Kompakt is a Kubernetes admission-time coordinator that prevents cluster autoscalers from over-provisioning nodes. It uses [scheduling gates](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/) (GA in K8s v1.30) to control when pods become visible to the scheduler and autoscaler, coordinating scale-up events across all workload types: Deployments, StatefulSets, Jobs, KServe, Argo, Ray, and anything else that creates pods.
+You deploy two GPU notebooks. Each needs half a GPU. One node is enough. But the cluster autoscaler provisions two nodes, because it cannot see that the second notebook fits on the node it already requested. You pay double.
 
-- No custom scheduler
-- No privileged DaemonSets
-- No vendor lock-in
+This is **autoscaler over-provisioning**. It happens because the autoscaler evaluates pods one [scan cycle](glossary.md#autoscaler-concepts) at a time (every 10-30 seconds), with incomplete information about what resources incoming nodes will have.
+
+Kompakt fixes this. It uses Kubernetes [scheduling gates](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/) (a feature that makes pods invisible to the scheduler until explicitly released) to control which pods the autoscaler can see and when. No custom scheduler. No privileged DaemonSets. No vendor lock-in.
 
 ![Without vs With Kompakt](diagrams/07-without-vs-with-kompakt.svg)
 
-## The problem
+## Why does the autoscaler over-provision?
 
-The cluster autoscaler evaluates pending pods in **scan cycles** (every 10-30 seconds). Pods that arrive in different cycles are not batched together. When a node is being provisioned but not yet Ready, the autoscaler simulates whether pending pods fit on it, but this simulation only works for resources declared in the node template.
+Three situations cause the autoscaler to provision more nodes than necessary:
 
-This causes over-provisioning whenever demand arrives faster than the autoscaler can batch it:
+**Demand arrives across multiple scan cycles.** The autoscaler checks for unschedulable pods every 10-30 seconds. Pods arriving in different cycles are evaluated independently. If two pods arrive 15 seconds apart, the autoscaler may provision two nodes even though both pods fit on one.
 
-- **Fractional GPU sharing**: Two notebooks each need half a GPU. One node is enough, but the autoscaler's node template does not declare `gpu-mem`. It provisions a second GPU node. You pay double.
-- **Burst deployments**: Three services scale simultaneously. The autoscaler sees them in separate scan cycles and provisions nodes independently instead of packing them together.
-- **Scale-from-zero**: A node pool has zero nodes. Two requests arrive within seconds. The first triggers a node, the second cannot see it and triggers another.
+**The autoscaler cannot simulate all resources.** When a node is being provisioned, the autoscaler uses a [node template](glossary.md#autoscaler-concepts) (a static model of the incoming node's resources) to predict whether pending pods will fit. But this template only contains infrastructure-level resources like CPU and memory. Resources registered by [device plugins](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/) after boot (GPU memory partitions, accelerator counts) are missing from the template. The autoscaler cannot simulate what it cannot see.
 
-These are not bugs in the autoscaler. The problem is that no one coordinates demand across scan cycles. See the [problem statement](introduction/problem-statement.md) for a detailed analysis.
+**Scale-from-zero has no information at all.** When a node pool has zero running nodes, there is no existing node to inspect. The autoscaler relies entirely on the node template. Combined with the device-plugin gap, this creates a complete information vacuum for GPU workloads.
+
+For a deeper analysis with concrete examples, read the [problem statement](introduction/problem-statement.md).
 
 ## What Kompakt does
 
-Kompakt coordinates pods in two ways, depending on which rules you configure:
+Kompakt coordinates pods using two rules, configured per workload class via a `PackingProfile` CRD:
 
-- **`WaitForWorkloadPacking`** (bin-packing): When your cluster has running nodes with spare capacity, Kompakt finds the best-fit node and releases the pod with node affinity. This minimizes wasted resources across existing nodes by packing pods onto the smallest sufficient node.
-- **`WaitForNodeReady`** (scale-up coordination): When the cluster needs new nodes, Kompakt lets the first pod through to trigger the autoscaler, then holds subsequent pods until the new node is ready. This prevents the autoscaler from seeing multiple unschedulable pods and provisioning redundant nodes.
+**`WaitForWorkloadPacking`** (bin-packing): When your cluster has running nodes with spare capacity, Kompakt finds the smallest node that fits the pod and releases it with [node affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/) pointing to that node. This packs pods tightly onto existing capacity instead of letting the autoscaler provision new nodes.
+
+**`WaitForNodeReady`** (scale-up coordination): When the cluster needs new nodes, Kompakt lets the first pod through to trigger the autoscaler. Subsequent pods are held invisible until the new node is ready. This prevents the autoscaler from seeing multiple unschedulable pods at once and provisioning redundant nodes.
 
 You can use one or both rules per profile. For most production clusters, both rules together provide the best cost savings.
 
 ## How it works
 
-1. **Webhook** intercepts pod creation, matches against a `PackingProfile` CRD, and injects scheduling gates
-2. **Controller** maintains a node ledger tracking existing capacity and in-flight nodes detected from the autoscaler
-3. **Rules** evaluate each gated pod: release immediately if no capacity exists anywhere (passthrough), hold if an in-flight node can fit the pod, or release with node affinity to a confirmed node
-4. **Your existing scheduler and autoscaler** continue working untouched. The scheduler places pods on confirmed capacity. The autoscaler sees only the demand it should see.
+1. A pod is created with a label referencing a `PackingProfile`
+2. Kompakt's **webhook** intercepts the pod and injects scheduling gates, making it invisible to the scheduler and autoscaler
+3. The **controller** checks cluster capacity: existing nodes, in-flight nodes detected from the autoscaler, and reservations from other gated pods
+4. **Rules** evaluate the pod: if existing capacity fits, release with node affinity. If an in-flight node can fit, hold the gate until it arrives. If nothing fits anywhere, release immediately so the autoscaler provisions a new node.
+5. **Your existing scheduler and autoscaler** continue working untouched
+
+For the full lifecycle walkthrough, see [How It Works](concepts/how-it-works.md).
 
 ## Quick start
 
@@ -52,51 +56,35 @@ helm install kompakt oci://ghcr.io/reyshazni/charts/kompakt \
   -n kompakt-system --create-namespace
 ```
 
-Then create a [PackingProfile](getting-started/first-profile.md) and label your workloads. See the [installation guide](getting-started/installation.md) for details.
+Then create a [PackingProfile](getting-started/first-profile.md) and label your workloads. See the [installation guide](getting-started/installation.md) for full instructions.
 
 ## Supported autoscalers and clouds
 
-Kompakt is autoscaler-aware, not cloud-aware. It detects in-flight nodes from whichever autoscaler is running via the Kubernetes API, without cloud credentials.
+Kompakt detects in-flight nodes from whichever autoscaler is running via the Kubernetes API, without cloud credentials:
 
 | Autoscaler | Detection method | Supported clouds |
 |---|---|---|
-| Cluster Autoscaler | `cluster-autoscaler-status` ConfigMap | EKS, GKE, AKS, self-managed |
-| GOATScaler | `ProvisionNode` pod events | Alibaba ACK |
-| Karpenter (planned) | `NodeClaim` CRD resources | EKS, AKS |
-| NotReady fallback | Node objects with Ready!=True | All clouds, all autoscalers |
+| [Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler) | `cluster-autoscaler-status` ConfigMap | EKS, GKE, AKS, self-managed |
+| GOATScaler (Alibaba ACK's autoscaler) | `ProvisionNode` pod events | Alibaba ACK |
+| [Karpenter](https://karpenter.sh/docs/) (planned) | `NodeClaim` CRD resources | EKS, AKS |
+| NotReady fallback | Node objects with `Ready!=True` | All clouds, all autoscalers |
 
-Detection is automatic. No configuration needed. See [compatibility matrix](reference/compatibility.md) for the full list of supported Kubernetes versions, managed services, GPU sharing systems, and workload controllers.
-
-## Supported workload types
-
-Kompakt operates at the Pod level. The webhook intercepts Pod CREATE events regardless of which controller created the pod:
-
-| Workload type | How it works |
-|---|---|
-| Deployment, StatefulSet | Each pod gated individually |
-| Job, CronJob | Gated, composes with Kueue if present |
-| KServe InferenceService | Underlying pods gated transparently |
-| Argo Workflow | Each step pod gated individually |
-| Ray RayCluster | Each worker pod gated |
-| Kubeflow PyTorchJob / TFJob | Each replica gated |
-| DaemonSet | Excluded by default |
+Detection is automatic. No configuration needed. See [compatibility matrix](reference/compatibility.md) for the full list.
 
 ## What Kompakt does not do
 
-Kompakt solves one specific problem: autoscaler over-provisioning caused by demand arriving faster than nodes. It does not:
+Kompakt solves one specific problem: autoscaler over-provisioning. It does not:
 
 - Replace kube-scheduler or the cluster autoscaler
-- Allocate GPU devices (use NVIDIA device-plugin, HAMi, or KAI)
-- Manage resource quotas (use Kueue or ResourceQuota)
-- Provide gang scheduling (use Volcano or Coscheduling)
+- Allocate GPU devices (use [NVIDIA device-plugin](https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/), [HAMi](https://github.com/Project-HAMi/HAMi), or [KAI Scheduler](https://github.com/NVIDIA/KAI-Scheduler))
+- Manage resource quotas (use [Kueue](https://kueue.sigs.k8s.io/) or ResourceQuota)
+- Provide gang scheduling (use [Volcano](https://volcano.sh/en/docs/) or Coscheduling)
 - Federate across clusters
 
-See [prior art](introduction/prior-art.md) for how Kompakt compares to these tools and when to use each.
+See [prior art](introduction/prior-art.md) for how Kompakt compares to these tools.
 
-## Next steps
+## Where to start
 
-- [Why Kompakt? Read the problem statement](introduction/problem-statement.md)
-- [Compare with existing tools](introduction/prior-art.md)
-- [Install Kompakt](getting-started/installation.md)
-- [Create your first PackingProfile](getting-started/first-profile.md)
-- [Understand how it works](concepts/how-it-works.md)
+If you want to understand why autoscalers over-provision, start with the [problem statement](introduction/problem-statement.md). If you are ready to try Kompakt, go to [installation](getting-started/installation.md). If you want to see how it works under the hood first, read [how it works](concepts/how-it-works.md).
+
+For terms you do not recognize (cGPU, HAMi, node template, scan cycle, etc.), see the [glossary](glossary.md).

@@ -4,6 +4,8 @@ description: How Kompakt uses a mutating webhook and coordination controller wit
 
 # How It Works
 
+*What happens when a pod is created in a Kompakt-enabled cluster?*
+
 ## The core idea
 
 Kompakt occupies the gap between admission and scheduling. It holds pods at admission time using Kubernetes [scheduling gates](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/) (GA since v1.30) and releases them when rules confirm that capacity is available, incoming, or needs to be requested. Everything below Kompakt (the scheduler, the autoscaler) is unmodified.
@@ -87,3 +89,5 @@ Kompakt does not modify or replace kube-scheduler or cluster-autoscaler, require
 | Ray RayCluster | Each worker pod gated |
 | Kubeflow PyTorchJob / TFJob | Each replica gated |
 | Plain Pod | Gated if label is present |
+
+Ready to try it? [Install Kompakt](../getting-started/installation.md) and [create your first profile](../getting-started/first-profile.md).

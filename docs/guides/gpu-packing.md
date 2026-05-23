@@ -27,12 +27,12 @@ Kompakt does not install or manage GPU device plugins. It reads the resource req
 
 ## Supported GPU sharing systems
 
-| System | How pods request GPU | Kompakt demand source | Version |
-|---|---|---|---|
-| [NVIDIA device-plugin](https://github.com/NVIDIA/k8s-device-plugin) | `resources.requests: nvidia.com/gpu` | ResourceRequest | v0.1 |
-| [Alibaba cGPU](https://www.alibabacloud.com/help/en/ack/ack-managed-and-ack-dedicated/user-guide/install-and-use-the-shared-gpu-component) | Pod annotation `aliyun.com/gpu-mem` | Annotation | v0.1 |
-| [HAMi](https://github.com/Project-HAMi/HAMi) | Pod annotations | Annotation | v0.2 |
-| [KAI](https://github.com/AliyunContainerService/gpushare-scheduler-extender) | Pod annotations | Annotation | v0.2 |
+| System | What it is | How pods request GPU | Kompakt demand source | Version |
+|---|---|---|---|---|
+| [NVIDIA device-plugin](https://github.com/NVIDIA/k8s-device-plugin) | Kubernetes [device plugin](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/) that registers `nvidia.com/gpu` resources on nodes | `resources.requests: nvidia.com/gpu` | ResourceRequest | v0.1 |
+| [Alibaba cGPU](https://www.alibabacloud.com/help/en/ack/ack-managed-and-ack-dedicated/user-guide/install-and-use-the-shared-gpu-component) | Alibaba Cloud's GPU memory sharing system for ACK | Pod annotation `aliyun.com/gpu-mem` | Annotation | v0.1 |
+| [HAMi](https://github.com/Project-HAMi/HAMi) | Open-source GPU sharing middleware ([CNCF Sandbox](https://github.com/Project-HAMi/HAMi)) | Pod annotations | Annotation | v0.2 |
+| [KAI](https://github.com/NVIDIA/KAI-Scheduler) | NVIDIA's open-source GPU scheduler ([KAI Scheduler](https://github.com/NVIDIA/KAI-Scheduler)) | Pod annotations | Annotation | v0.2 |
 
 ## Which rules to use
 
@@ -110,7 +110,7 @@ This works for both whole-GPU requests and NVIDIA time-slicing (where `nvidia.co
 
 This section assumes you have Alibaba cGPU installed on your ACK cluster. cGPU is installed via the ACK console under "Manage System Components" or via the cGPU Helm chart. Once installed, it provides the `aliyun.com/gpu-mem` annotation for GPU memory sharing and adds `aliyun.accelerator/gpu-memory-mib` and `aliyun.accelerator/gpu-count` labels to GPU nodes.
 
-cGPU expresses GPU memory demand via pod annotations and node capacity via node labels. The cluster autoscaler does not understand these annotations, which makes over-provisioning especially severe. This is the primary use case for Kompakt.
+cGPU uses pod annotations (not standard Kubernetes [resource requests](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/)) to express GPU memory demand. The cluster autoscaler cannot simulate resources it does not know about, which makes GPU over-provisioning particularly severe. Node capacity is expressed via node labels. This is the primary use case for Kompakt.
 
 ### 1. Create the profile
 

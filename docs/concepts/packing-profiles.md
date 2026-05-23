@@ -1,5 +1,7 @@
 # PackingProfiles
 
+*How do you tell Kompakt what to coordinate?*
+
 A `PackingProfile` is a cluster-scoped custom resource that defines how Kompakt coordinates a class of workloads. Pods opt in by label:
 
 ```yaml
@@ -23,6 +25,8 @@ spec:
   rules: []
   reservationTimeout: 3m
 ```
+
+A PackingProfile answers three questions: What does this pod need? (`demandSource`) What can nodes provide? (`capacitySource`) When is a node ready to accept pods? (`readinessSignal`)
 
 ## Demand source
 
@@ -72,3 +76,5 @@ Create multiple profiles for different workload classes. Each pod references exa
 ## Checking profile status
 
 Run `kubectl get packingprofiles`. The `ACTIVE GATES` column shows how many pods are currently gated by each profile. For the complete field reference, see [API Reference](../reference/api-reference.md).
+
+To understand how these fields drive gating decisions, see [Rule Plugins](rule-plugins.md). For the complete field reference, see [API Reference](../reference/api-reference.md).

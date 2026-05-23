@@ -13,8 +13,8 @@ You run Kubernetes clusters across multiple cloud providers and want consistent 
 | Cloud | Autoscaler | In-flight detection | Status |
 |---|---|---|---|
 | Amazon EKS | CA or Karpenter | CA ConfigMap, Karpenter NodeClaim | v0.1 |
-| Alibaba ACK | CA or ack-goatscaler | CA ConfigMap, goatscaler TBD | v0.1 |
-| Google GKE Standard | CA + NAP | CA ConfigMap, NAP NodePool | v0.2 |
+| Alibaba ACK (Alibaba Cloud Container Service for Kubernetes) | CA or ack-goatscaler | CA ConfigMap, goatscaler TBD | v0.1 |
+| Google GKE Standard | CA + NAP (Node Auto-Provisioning) | CA ConfigMap, NAP NodePool | v0.2 |
 | Azure AKS | CA or NAP (Karpenter) | CA ConfigMap, Karpenter NodeClaim | v0.2 |
 | Tencent TKE | CA | CA ConfigMap | v0.2 |
 | Oracle OKE | CA | CA ConfigMap | v0.3 |

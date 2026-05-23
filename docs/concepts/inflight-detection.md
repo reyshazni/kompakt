@@ -1,5 +1,7 @@
 # In-flight Node Detection
 
+*How does Kompakt know that a new node is on its way?*
+
 Kompakt needs to know about nodes that are being provisioned but not yet Ready. This is how WaitForNodeReady avoids double-provisioning: if the autoscaler is already bringing up a node, Kompakt holds subsequent pods instead of letting the autoscaler provision another one.
 
 ## Autoscaler-aware, not cloud-aware
@@ -12,8 +14,8 @@ Detection works in two layers with a priority chain:
 
 | Detector | Autoscaler | Signal | Clouds |
 |---|---|---|---|
-| ClusterAutoscalerDetector | Upstream CA | `cluster-autoscaler-status` ConfigMap | EKS, GKE, AKS, self-managed |
-| GOATScalerDetector | ACK GOATScaler | `ProvisionNode` pod events | Alibaba ACK |
+| ClusterAutoscalerDetector | Upstream CA | `cluster-autoscaler-status` ConfigMap (a ConfigMap the Cluster Autoscaler writes to report which node groups are scaling) | EKS, GKE, AKS, self-managed |
+| GOATScalerDetector | ACK GOATScaler | `ProvisionNode` pod events (Kubernetes Events emitted by GOATScaler when it decides to provision a new node) | Alibaba ACK |
 | KarpenterDetector (planned) | Karpenter | `NodeClaim` CRD resources | EKS, AKS (NAP) |
 
 **Layer 2: Node-based (fallback)** detects nodes that exist in Kubernetes but have never been Ready. This covers the secondary window while the node initializes (GPU driver, device plugin, CNI). Typically 2-5 minutes for GPU nodes. Works on every cloud and every autoscaler, including custom autoscalers that Kompakt does not know about.
@@ -69,3 +71,5 @@ Without templates, in-flight nodes have unknown capacity and WaitForNodeReady ca
 ## Fallback behavior
 
 If neither layer detects in-flight nodes (e.g., the autoscaler is completely unknown and nodes appear instantly as Ready), WaitForNodeReady still works. It uses passthrough: the first pod is released immediately to trigger the autoscaler, subsequent pods are released when the node becomes Ready (detected as an existing node by the regular ledger sync). This is slower but still prevents over-provisioning through coordinated release.
+
+For how to configure expected capacity for in-flight nodes, see [Node Group Templates](../reference/node-group-templates.md).

@@ -8,7 +8,7 @@ This guide walks through the most common Kompakt use case: preventing the cluste
 
 ## When you need this
 
-Your GPU node pool scales to zero when idle to save cost. When users request GPU workloads (notebooks, inference, training), the autoscaler provisions new GPU nodes. If multiple requests arrive within the same autoscaler scan cycle (~30s), each one triggers a separate node, even when they could share.
+Your GPU node pool scales to zero when idle to save cost. When users request GPU workloads (notebooks, inference, training), the autoscaler provisions new GPU nodes. If multiple requests arrive within the same autoscaler [scan cycle](../glossary.md#autoscaler-concepts) (~30s), each one triggers a separate node, even when they could share.
 
 ## Prerequisites
 
@@ -27,7 +27,7 @@ Without Kompakt:
 2. Autoscaler sees A, triggers scale-up of 1 node
 3. Node is provisioning (~3 min for GPU)
 4. Notebook B created, also Pending
-5. Autoscaler sees B, checks if the upcoming node can fit it. But the node template is missing gpu-mem (only declares gpu-core.percentage). Simulation says B does not fit.
+5. Autoscaler sees B, checks if the upcoming node can fit it. But the node template is missing gpu-mem (only declares `gpu-core.percentage` (cGPU annotation for GPU compute share percentage)). Simulation says B does not fit.
 6. Autoscaler triggers scale-up of a second node
 
 Result: 2 nodes for 2 half-GPU notebooks. 1 node was enough. You pay double.
@@ -94,7 +94,7 @@ Before applying, replace these values with your own:
 
 | Field | What to put | How to find it |
 |---|---|---|
-| `namePrefix: pool-l20` | Your GPU node pool name | See [Finding your node pool name](#finding-your-node-pool-name) |
+| `namePrefix: pool-l20` | Your GPU node pool name | See [Finding your node pool name](#finding-your-node-pool-name-and-template-values) |
 | `aliyun.com/gpu-mem: 49152` | Total GPU memory in MiB for your GPU type | L20 = 49152, A100-40G = 40960, V100 = 16384, T4 = 15360 |
 | `reservationTimeout: 5m` | Longer than your GPU node provisioning time | GPU nodes typically take 2-5 minutes |
 
@@ -112,7 +112,7 @@ kubectl apply -f packingprofile.yaml
 
 ### 2. Label your workloads
 
-Add the profile label to your notebook Deployment, StatefulSet, or any workload that creates pods. The `aliyun.com/gpu-mem` annotation is set by your platform (JupyterHub, KubeFlow, etc.). Kompakt reads it but does not create it.
+Add the profile label to your notebook Deployment, StatefulSet, or any workload that creates pods. The `aliyun.com/gpu-mem` annotation (GPU memory demand in MiB, set by cGPU) is configured by your workload platform (JupyterHub, KubeFlow, etc.). Kompakt reads it but does not create it.
 
 ```yaml
 apiVersion: apps/v1

@@ -10,7 +10,7 @@ description: Install Kompakt on Kubernetes 1.30+ using Helm or kustomize. One co
 - `kubectl` connected to your cluster
 - `helm` (version 3 or newer)
 
-Not sure if `kubectl` is working? Run `kubectl version` -- if you see a server version, you're good.
+Not sure if `kubectl` is working? Run `kubectl version`. If you see a server version, you're good.
 
 ## Quick install (one command)
 

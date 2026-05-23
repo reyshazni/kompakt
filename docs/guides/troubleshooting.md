@@ -6,7 +6,7 @@ Something is not working as expected. Pods are stuck, the webhook is not interce
 
 ## Pod stuck in SchedulingGated
 
-**Symptom**: Pod stays in `SchedulingGated` phase and never schedules.
+**Symptom**: Pod stays in SchedulingGated (a Kubernetes pod phase indicating the pod has [scheduling gates](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-scheduling-readiness/) and the scheduler cannot act on it) and never schedules.
 
 **Diagnosis**:
 

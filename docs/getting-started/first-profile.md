@@ -38,6 +38,8 @@ Apply it:
 kubectl apply -f packingprofile.yaml
 ```
 
+This profile tells Kompakt: measure what each pod needs by reading its CPU and memory [resource requests](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/) (`demandSource`), measure what nodes can provide by reading their [allocatable](https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/) resources (`capacitySource`), consider a node ready when its `Ready` [condition](https://kubernetes.io/docs/reference/node/node-status/) is True (`readinessSignal`), and use both bin-packing and scale-up coordination rules.
+
 The profile defines HOW to coordinate. It does not select pods. Pods opt in by referencing this profile by name.
 
 ## 2. Label your workloads
@@ -105,6 +107,4 @@ For a detailed explanation of the gating and release flow, see [How It Works](..
 
 ## Next steps
 
-- [CPU/Memory packing guide](../guides/cpu-memory-packing.md) for advanced configuration
-- [GPU packing guide](../guides/gpu-packing.md) for fractional GPU workloads
-- [How it works](../concepts/how-it-works.md) for a deeper understanding of the architecture
+Your cluster is now coordinating pod placement. For production tuning, see the [CPU/Memory packing guide](../guides/cpu-memory-packing.md). For GPU workloads, see the [GPU packing guide](../guides/gpu-packing.md). To understand the full gating lifecycle, read [How It Works](../concepts/how-it-works.md).

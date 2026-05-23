@@ -1,5 +1,7 @@
 # Node Ledger
 
+*How does Kompakt know what capacity exists in the cluster?*
+
 The node ledger is an internal data structure that tracks cluster capacity in real time. It is the controller's source of truth for making bin-packing decisions.
 
 ## What the ledger tracks
@@ -59,3 +61,5 @@ In v0.3, a persistent ledger backed by a Kubernetes resource or etcd will be ava
 | Maximum entries | 100,000 (nodes + pods + reservations) |
 | Memory at max scale | ~500 MB |
 | Cold start rebuild | < 10s |
+
+The ledger feeds into [rule plugins](rule-plugins.md), which use it to decide when to release each gated pod.

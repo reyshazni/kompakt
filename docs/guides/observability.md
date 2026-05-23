@@ -16,9 +16,7 @@ lines at default verbosity, regardless of how long it stays gated.
 
 ### Trace Correlation
 
-Every gated pod receives a `kompakt.io/trace-id` annotation (8-character UUID) set by the
-webhook at admission time. This trace ID appears in every log line for that pod, across
-both webhook and controller:
+Every gated pod receives a trace ID (an 8-character identifier injected by the webhook as the `kompakt.io/trace-id` pod annotation, used to correlate logs across the webhook and controller). This trace ID appears in every log line for that pod:
 
 ```
 # Webhook log (pod creation)

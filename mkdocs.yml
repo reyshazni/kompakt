@@ -98,3 +98,4 @@ nav:
   - Contributing:
     - Development Setup: contributing/development.md
     - Architecture: contributing/architecture.md
+  - Glossary: glossary.md

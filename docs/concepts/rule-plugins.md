@@ -1,5 +1,7 @@
 # Rule Plugins
 
+*How does Kompakt decide when to release a gated pod?*
+
 Rule plugins are the decision-making components of Kompakt. Each rule evaluates a gated pod against cluster state and decides whether the gate should be released.
 
 ## How rules work
@@ -45,7 +47,7 @@ Coordinates pods during node scale-up events. Prevents the cluster autoscaler fr
 
 Three-state decision logic:
 
-1. **No capacity anywhere** (no existing nodes fit, no in-flight nodes): release the gate immediately. The pod becomes visible to the autoscaler and triggers a scale-up. This is the "first mover": someone has to signal the autoscaler.
+1. **No capacity anywhere** (no existing nodes fit, no in-flight nodes): release the gate immediately. The pod becomes visible to the autoscaler and triggers a scale-up. This is the "first mover": at least one pod must become visible to the autoscaler so it knows to provision a node.
 2. **In-flight node can fit**: hold the gate and reserve capacity on the incoming node. The pod stays invisible to the autoscaler, preventing a redundant scale-up. When the node becomes Ready, the controller re-evaluates and releases with real node affinity.
 3. **Existing node can fit**: release the gate with node affinity to the real node.
 
@@ -75,3 +77,5 @@ The following rules are planned for future releases:
 | WaitForImagePrePull | v0.2 | Hold gate until large container images are pre-pulled on the target node | `kompakt.io/awaiting-image-prepull` |
 | WaitForMIGProfile | v0.3 | Hold gate until GPU MIG profile reconfiguration completes | `kompakt.io/awaiting-mig-reconfig` |
 | WaitForCoLocation | v0.3 | Hold gate until co-located pods can be placed together | `kompakt.io/awaiting-colocation` |
+
+Rules depend on in-flight node detection to know when new nodes are coming. See [In-flight Node Detection](inflight-detection.md).

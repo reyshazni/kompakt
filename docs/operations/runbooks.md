@@ -23,6 +23,8 @@ for: 10m
 kubectl get pods -n kompakt-system -l app.kubernetes.io/name=kompakt
 
 # 2. Is the controller the leader?
+# Leader election: when running multiple replicas, one becomes the active
+# leader via a Kubernetes Lease. Only the leader makes gating decisions.
 kubectl get lease kompakt-leader -n kompakt-system -o yaml
 
 # 3. What profiles are the gated pods using?
@@ -44,7 +46,7 @@ kubectl logs -n kompakt-system -l app.kubernetes.io/name=kompakt --tail=200 | gr
 | Controller crashed / OOMKilled | Pod in CrashLoopBackOff | Increase memory limit, check logs for panic |
 | Leader election lost | Lease holder differs from running pod | Wait for re-election (~15s) or restart pod |
 | No capacity anywhere | Ledger has 0 nodes, 0 inflight | Autoscaler may be at max. Check node pool limits |
-| In-flight detection broken | Autoscaler provisioning but `kompakt_ledger_inflight_nodes` = 0 | Check adapter (CA ConfigMap exists? GOATScaler events firing?) |
+| In-flight detection broken | Autoscaler provisioning but `kompakt_ledger_inflight_nodes` (in-flight nodes the system is tracking as being provisioned but not yet Ready) = 0 | Check adapter (CA ConfigMap exists? GOATScaler events firing?) |
 | Reservation timeout too high | Pods gated for longer than node provisioning time | Lower `reservationTimeout` in the profile |
 | Burst of demand | Legitimate burst, controller working through queue | Wait. Check if `kompakt_gated_pods` is decreasing |
 

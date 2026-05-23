@@ -13,11 +13,11 @@
 
 | Cloud | Service | Autoscaler | In-flight detection | Kompakt version |
 |---|---|---|---|---|
-| AWS | EKS | Cluster Autoscaler | CA ConfigMap | v0.1 |
+| AWS | EKS | Cluster Autoscaler | Cluster Autoscaler (CA) ConfigMap | v0.1 |
 | AWS | EKS | Karpenter | NodeClaim | v0.1 |
 | Alibaba | ACK | Cluster Autoscaler | CA ConfigMap | v0.1 |
 | Alibaba | ACK | ack-goatscaler | TBD | v0.1 (verification pending) |
-| Google | GKE Standard | CA + NAP | CA ConfigMap, NAP NodePool | v0.2 |
+| Google | GKE Standard | CA + NAP (GKE Node Auto-Provisioning) | CA ConfigMap, NAP NodePool | v0.2 |
 | Azure | AKS | Cluster Autoscaler | CA ConfigMap | v0.2 |
 | Azure | AKS | NAP (Karpenter) | NodeClaim | v0.2 |
 | Tencent | TKE | Cluster Autoscaler | CA ConfigMap | v0.2 |

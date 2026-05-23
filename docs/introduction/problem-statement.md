@@ -26,9 +26,9 @@ The autoscaler evaluates pending pods in discrete scan cycles. Pods that arrive 
 
 ### Mode 2: Incomplete node template simulation
 
-The autoscaler simulates fit using a **node template**, a static declaration derived from the node group configuration. It only contains resources the cloud provider declares at the infrastructure level (CPU, memory, ephemeral storage), not resources registered dynamically after boot:
+The autoscaler simulates fit using a **node template** (the autoscaler's static model of what resources a node will have; see [Glossary](../glossary.md)), a static declaration derived from the node group configuration. Resources registered by [device plugins](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/) after the node boots are invisible to the autoscaler:
 
-- GPU memory partitions from device plugins (cGPU `aliyun.com/gpu-mem`, HAMi annotations)
+- GPU memory partitions from device plugins (cGPU (Alibaba's GPU sharing system) `aliyun.com/gpu-mem`, [HAMi](https://github.com/Project-HAMi/HAMi) annotations)
 - Extended resources from NVIDIA device plugin (`nvidia.com/gpu` counts for time-slicing)
 - Custom resources from DaemonSets that register after node join
 
@@ -73,3 +73,5 @@ Kompakt operates under a strict set of constraints that preserve the existing Ku
 | Failure mode = passthrough | If Kompakt fails, pods are created normally (ungated). Never block the cluster |
 
 These constraints are non-negotiable. Any feature proposal that violates them is rejected regardless of benefit.
+
+Now that you understand the coordination gap, see [How It Works](../concepts/how-it-works.md) for how Kompakt fills it, or go straight to [Installation](../getting-started/installation.md) if you are ready to try it.

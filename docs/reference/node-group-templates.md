@@ -43,6 +43,8 @@ For GOATScaler (ACK), the prefix matches the scaling group name from `ProvisionN
 
 A map of resource names to their milliValues (int64), representing total allocatable capacity for bin-packing.
 
+Kubernetes represents CPU in millicores (1000m = 1 core) and memory in bytes. The `allocatable` field in templates uses these same units. See [Resource Management](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/) for details.
+
 | Resource type | Raw value | milliValue | Example |
 |---|---|---|---|
 | CPU | 16 cores | 16000 | 16 vCPU node -> `cpu: 16000` |
@@ -51,7 +53,7 @@ A map of resource names to their milliValues (int64), representing total allocat
 | GPU memory (cGPU) | 49152 MiB | 49152 | L20 48GiB -> `aliyun.com/gpu-mem: 49152` |
 
 !!! note
-    For annotation-based demand sources (cGPU), the allocatable value uses the same unit as the annotation. cGPU annotations are in MiB, so the template value is also in MiB (not milliValue).
+    For cGPU, the allocatable value uses MiB (the same unit as the `aliyun.com/gpu-mem` pod annotation), not Kubernetes millicores.
 
 Get allocatable values from an existing node (`kubectl get node <node-name> -o jsonpath='{.status.allocatable}' | jq`) or from cloud provider documentation:
 

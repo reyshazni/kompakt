@@ -81,3 +81,5 @@ Kompakt solves one specific problem: autoscaler over-provisioning caused by dema
 2. Is the over-provisioning caused by pods arriving in separate autoscaler scan cycles? If yes, Kompakt's `WaitForNodeReady` rule directly solves this. If unsure, check your autoscaler logs for multiple scale-up decisions within 1-5 minutes.
 3. Is the over-provisioning caused by device-plugin resources missing from node templates? If yes, Kompakt's `nodeGroupTemplates` fills the gap.
 4. Do you have a scale-from-zero scenario where the autoscaler cannot simulate upcoming node capacity? If yes, Kompakt's in-flight detection + template enrichment solves this. If no, try tuning autoscaler parameters (scan interval, expander strategy).
+
+If Kompakt fits your problem, [install it](../getting-started/installation.md) and [create your first profile](../getting-started/first-profile.md).

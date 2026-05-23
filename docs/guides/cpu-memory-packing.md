@@ -2,6 +2,9 @@
 
 This guide covers how to use Kompakt to coordinate CPU and memory workloads.
 
+!!! note "Prerequisites"
+    Before this guide, read [How It Works](../concepts/how-it-works.md) and [PackingProfiles](../concepts/packing-profiles.md).
+
 ## When you need this
 
 You have multiple Deployments, StatefulSets, or other workloads that scale simultaneously, and your cluster autoscaler provisions more nodes than necessary. Common triggers:

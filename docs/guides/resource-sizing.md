@@ -92,7 +92,7 @@ Add 20% headroom and round up to the nearest 10m.
 
 Memory does not scale with pod count. 64Mi is sufficient for any
 reasonable workload. Only increase if you have 1000+ nodes (larger
-informer cache).
+informer cache (controller-runtime's in-memory copy of Kubernetes API objects; see [Glossary](../glossary.md)).
 
 **Step 4:** Set limits.
 
