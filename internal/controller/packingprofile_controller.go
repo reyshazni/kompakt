@@ -19,20 +19,22 @@ import (
 
 	v1alpha1 "github.com/reyshazni/kompakt/api/v1alpha1"
 	"github.com/reyshazni/kompakt/internal/inflight"
+	"github.com/reyshazni/kompakt/internal/kompakt"
 	"github.com/reyshazni/kompakt/internal/ledger"
 	kompaktmetrics "github.com/reyshazni/kompakt/internal/metrics"
 	"github.com/reyshazni/kompakt/internal/rules"
 	"github.com/reyshazni/kompakt/internal/scheduling"
 )
 
-const (
-	labelProfile       = "packer.kompakt.io/packing-profile"
-	annotationPriority = "kompakt.io/priority"
-	annotationTraceID  = "kompakt.io/trace-id"
-	annotationReason   = "kompakt.io/gate-reason"
-	annotationNode     = "kompakt.io/target-node"
-	annotationHeldBy   = "kompakt.io/held-by"
-	gatePrefix         = "kompakt.io/"
+// Aliases for shared constants (keep short names in this file).
+var (
+	labelProfile       = kompakt.LabelProfile
+	annotationPriority = kompakt.AnnotationPriority
+	annotationTraceID  = kompakt.AnnotationTraceID
+	annotationReason   = kompakt.AnnotationReason
+	annotationNode     = kompakt.AnnotationNode
+	annotationHeldBy   = kompakt.AnnotationHeldBy
+	gatePrefix         = kompakt.GatePrefix
 )
 
 // PackingProfileReconciler reconciles gated pods by evaluating rules
@@ -50,7 +52,6 @@ type PackingProfileReconciler struct {
 func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	// 1. Get the pod
 	pod := &corev1.Pod{}
 	if err := r.Get(ctx, req.NamespacedName, pod); err != nil {
 		if errors.IsNotFound(err) {
@@ -59,12 +60,10 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return ctrl.Result{}, err
 	}
 
-	// 2. Check if pod has kompakt gates
 	if !hasKompaktGates(pod) {
 		return ctrl.Result{}, nil
 	}
 
-	// 3. Get profile name from label
 	profileName, ok := pod.Labels[labelProfile]
 	if !ok {
 		return ctrl.Result{}, nil
@@ -74,7 +73,6 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	traceID := pod.Annotations[annotationTraceID]
 	logger = logger.WithValues("traceID", traceID, "profile", profileName, "podUID", pod.UID)
 
-	// 4. Get PackingProfile
 	profile := &v1alpha1.PackingProfile{}
 	if err := r.Get(ctx, client.ObjectKey{Name: profileName}, profile); err != nil {
 		if errors.IsNotFound(err) {
@@ -89,35 +87,30 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	defer func() {
 		setLedgerReadyCondition(profile, ledgerSyncErr)
 		if err := r.updateProfileStatus(ctx, profile); err != nil {
-			logger.Error(err, "failed to update profile status")
+			logger.Error(err, "profile status update")
 		}
 	}()
 
-	// 5. Warn on misconfigured profile
 	warnProfileMisconfig(logger, profile)
 
-	// 6. Sync ledger from cluster state
 	ledgerSyncErr = r.syncLedger(ctx, logger, profile, pod)
 	if ledgerSyncErr != nil {
 		logger.Error(ledgerSyncErr, "ledger sync failed, retrying")
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
-	// 7. Check priority override
 	if pod.Annotations[annotationPriority] == "high" {
 		r.recordRelease(pod, profileName, "priority", "")
 		logger.Info("Gate released", "reason", "priority")
 		return ctrl.Result{}, r.releaseGates(ctx, pod, "priority")
 	}
 
-	// 8. Check reservation timeout
 	if isTimedOut(pod, profile, logger) {
 		r.recordRelease(pod, profileName, "timeout", "")
 		logger.Info("Gate released", "reason", "timeout")
 		return ctrl.Result{}, r.releaseGates(ctx, pod, "timeout")
 	}
 
-	// 9. Run rules
 	allRelease := true
 	var targetNode string
 	var holdingRule string
@@ -153,12 +146,11 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	if !allRelease {
 		if err := r.annotatePod(ctx, pod, annotationHeldBy, holdingRule); err != nil {
-			logger.V(1).Info("failed to annotate held-by", "error", err)
+			logger.V(1).Info("held-by annotation skipped", "error", err)
 		}
 		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
-	// 10. Release gates with optional node affinity
 	r.recordRelease(pod, profileName, "capacity", targetNode)
 	logger.Info("Gate released", "reason", "capacity", "node", targetNode)
 	if err := r.releaseGatesWithAffinity(ctx, pod, targetNode, "capacity"); err != nil {

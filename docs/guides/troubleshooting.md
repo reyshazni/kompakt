@@ -72,7 +72,7 @@ kubectl logs -n kompakt-system -l app.kubernetes.io/name=kompakt --tail=100
 1. **Webhook not installed**: The `MutatingWebhookConfiguration` is missing. Reinstall with Helm.
 2. **Webhook pod is down**: The webhook pod crashed or is not scheduled. Check pod events.
 3. **Failure policy is Ignore**: In v0.x, webhook outages cause pods to bypass gating silently. This is by design.
-4. **Namespace exclusion**: Some Helm configurations exclude certain namespaces from webhook interception.
+4. **Missing label**: The pod does not have the `packer.kompakt.io/packing-profile` label. Only pods with this label are gated.
 
 ## High webhook latency
 

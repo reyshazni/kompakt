@@ -26,6 +26,8 @@ var provisionNodeRegex = regexp.MustCompile(
 	`Provision node (\S+) in Zone: (\S+) with InstanceType: (\S+), Triggered time (.+)`,
 )
 
+var _ Detector = (*GOATScalerDetector)(nil)
+
 // GOATScalerDetector detects in-flight nodes from ACK GOATScaler ProvisionNode
 // pod events. This is the earliest signal that a scale-up is happening on ACK,
 // firing before the ECS API call and before the Node object exists.

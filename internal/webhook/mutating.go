@@ -12,14 +12,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	"github.com/reyshazni/kompakt/internal/kompakt"
 	"github.com/reyshazni/kompakt/internal/matcher"
 	kompaktmetrics "github.com/reyshazni/kompakt/internal/metrics"
 )
 
-const (
-	labelProfile      = "packer.kompakt.io/packing-profile"
-	labelExclude      = "kompakt.io/exclude"
-	annotationTraceID = "kompakt.io/trace-id"
+var (
+	labelProfile      = kompakt.LabelProfile
+	labelExclude      = kompakt.LabelExclude
+	annotationTraceID = kompakt.AnnotationTraceID
 )
 
 // gateNames maps rule plugin names to scheduling gate names.

@@ -22,6 +22,8 @@ const (
 	instanceTypeLabel = "node.kubernetes.io/instance-type"
 )
 
+var _ Detector = (*NotReadyNodeDetector)(nil)
+
 // NotReadyNodeDetector detects nodes that exist in Kubernetes but have never
 // been Ready. This is a universal fallback that works on every cloud and
 // every autoscaler.

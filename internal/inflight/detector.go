@@ -27,6 +27,8 @@ type Detector interface {
 	Detect(ctx context.Context, reader client.Reader) ([]InflightNode, error)
 }
 
+var _ Detector = (*ClusterAutoscalerDetector)(nil)
+
 // ClusterAutoscalerDetector reads the cluster-autoscaler-status ConfigMap
 // to detect pending scale-up events.
 type ClusterAutoscalerDetector struct{}

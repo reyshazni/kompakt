@@ -13,6 +13,8 @@ func init() {
 	Register(&WaitForScaleUp{})
 }
 
+var _ Rule = (*WaitForScaleUp)(nil)
+
 // WaitForScaleUp coordinates pods during node scale-up events.
 // It prevents the cluster autoscaler from over-provisioning by controlling
 // pod visibility through three-state decision logic:

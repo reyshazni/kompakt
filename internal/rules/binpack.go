@@ -13,6 +13,8 @@ func init() {
 	Register(&BinPackOnInflightCapacity{})
 }
 
+var _ Rule = (*BinPackOnInflightCapacity)(nil)
+
 // BinPackOnInflightCapacity is the core rule for v0.1.
 // It extracts demand from the pod, finds a node with sufficient capacity
 // (existing or in-flight), reserves the capacity, and releases the gate.

@@ -228,8 +228,8 @@ If you created a PackingProfile and labeled your pods but they are not getting
 scheduling gates:
 
 1. Check that the webhook is registered: `kubectl get mutatingwebhookconfiguration`
-2. Check that your pod's namespace is not excluded (kube-system, kube-public, and
-   the controller namespace are excluded by default)
+2. Check that your pod has the `packer.kompakt.io/packing-profile` label set to a
+   valid PackingProfile name. Pods without this label are not gated.
 3. Check controller logs for errors
 
 ### Webhook returns "connection refused"
