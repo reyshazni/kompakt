@@ -173,7 +173,7 @@ func TestWaitForScaleUp_Layer1SignalOnly_Hold(t *testing.T) {
 	// Layer 1 detected inflight node but with empty allocatable (no capacity data yet).
 	// WaitForScaleUp should HOLD (not passthrough) because a node is coming.
 	l := ledger.New()
-	l.AddInflightNode("goatscaler/asa-xyz", map[string]int64{}, nil, nil)
+	l.AddInflightNode("test-cpu/asa-xyz", map[string]int64{}, nil, nil)
 
 	rule := &WaitForScaleUp{}
 	release, _, err := rule.Evaluate(context.Background(), podWithCPU("pod-1", 1000), l, cpuProfile())

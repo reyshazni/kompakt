@@ -14,6 +14,7 @@ import (
 
 func cpuProfile() *v1alpha1.PackingProfile {
 	return &v1alpha1.PackingProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cpu"},
 		Spec: v1alpha1.PackingProfileSpec{
 			DemandSource: v1alpha1.DemandSource{
 				Type:      "ResourceRequest",

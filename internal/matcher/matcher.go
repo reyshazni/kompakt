@@ -31,7 +31,7 @@ func (r *ProfileResolver) Resolve(ctx context.Context, name string) (*v1alpha1.P
 }
 
 // testScheme returns a scheme with PackingProfile registered.
-// Exported for testing only within this package.
+// Unexported, used only in matcher_test.go.
 func testScheme() *runtime.Scheme {
 	s := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(s)

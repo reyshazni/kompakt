@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/reyshazni/kompakt/internal/ledger"
 	kompaktmetrics "github.com/reyshazni/kompakt/internal/metrics"
 	"github.com/reyshazni/kompakt/internal/rules"
+	"github.com/reyshazni/kompakt/internal/scheduling"
 )
 
 const (
@@ -95,7 +97,7 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	warnProfileMisconfig(logger, profile)
 
 	// 6. Sync ledger from cluster state
-	ledgerSyncErr = r.syncLedger(ctx, logger, profile)
+	ledgerSyncErr = r.syncLedger(ctx, logger, profile, pod)
 	if ledgerSyncErr != nil {
 		logger.Error(ledgerSyncErr, "ledger sync failed, retrying")
 		return ctrl.Result{RequeueAfter: time.Second}, nil
@@ -169,7 +171,6 @@ func (r *PackingProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 // recordRelease records metrics and emits a Kubernetes Event for a gate release.
 func (r *PackingProfileReconciler) recordRelease(pod *corev1.Pod, profileName, reason, targetNode string) {
 	kompaktmetrics.GateReleasesTotal.WithLabelValues(profileName, reason).Inc()
-	kompaktmetrics.GatedPods.WithLabelValues(pod.Namespace, profileName).Dec()
 	if !pod.CreationTimestamp.IsZero() {
 		kompaktmetrics.GateHoldDuration.WithLabelValues(profileName, reason).Observe(time.Since(pod.CreationTimestamp.Time).Seconds())
 	}
@@ -193,6 +194,7 @@ func (r *PackingProfileReconciler) recordHold(pod *corev1.Pod, profileName, rule
 // destructively (syncLedger + FindFit + Reserve is not atomic).
 func (r *PackingProfileReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(controller.Options{MaxConcurrentReconciles: 1}).
 		For(&corev1.Pod{}).
 		WithEventFilter(predicate.NewPredicateFuncs(func(obj client.Object) bool {
 			pod, ok := obj.(*corev1.Pod)
@@ -220,6 +222,10 @@ func (r *PackingProfileReconciler) updateProfileStatus(ctx context.Context, prof
 	profile.Status.ActiveGates = activeGates
 	profile.Status.InflightNodes = int32(r.Ledger.Snapshot().InflightCount)
 	profile.Status.ActiveDetectors = r.activeDetectors
+
+	// Note: GatedPods gauge is not set here because it requires per-namespace
+	// breakdown. The gauge will be inaccurate after restart but won't go negative
+	// (Dec removed from recordRelease). Proper fix in v0.2: recompute from pod list.
 
 	// Set conditions
 	setProfileValidCondition(profile)
@@ -311,7 +317,7 @@ func (r *PackingProfileReconciler) annotatePod(ctx context.Context, pod *corev1.
 	return r.Patch(ctx, pod, patch)
 }
 
-func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.Logger, profile *v1alpha1.PackingProfile) error {
+func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.Logger, profile *v1alpha1.PackingProfile, pod *corev1.Pod) error {
 	// Snapshot reservations before rebuild so they survive across cycles
 	reservations := r.Ledger.SnapshotReservations()
 	r.Ledger.ClearNodes()
@@ -438,16 +444,23 @@ func (r *PackingProfileReconciler) syncLedger(ctx context.Context, logger logr.L
 		nodeLabels := n.Labels
 		var nodeTaints []corev1.Taint
 
+		// Try node-identity matching first (NotReady nodes with real labels/instanceType).
+		// Fall back to pod-aware matching (Layer 1 nodes with no identity).
 		tmpl := findMatchingTemplate(n, profile.Spec.CapacitySource.NodeGroupTemplates)
+		if tmpl == nil {
+			tmpl = findTemplateForPod(pod, profile.Spec.CapacitySource.NodeGroupTemplates)
+		}
 		if tmpl != nil {
 			if len(alloc) == 0 {
 				alloc = copyTemplateAllocatable(tmpl.Allocatable)
 			}
-			// Enrich inflight node with template labels and taints
+			// Enrich inflight node: template fills gaps, doesn't overwrite
 			if len(nodeLabels) == 0 {
 				nodeLabels = tmpl.Labels
 			}
-			nodeTaints = templateTaintsToCoreTaints(tmpl.Taints)
+			if len(nodeTaints) == 0 {
+				nodeTaints = templateTaintsToCoreTaints(tmpl.Taints)
+			}
 			logger.V(1).Info("inflight node enriched from template", "node", n.Name,
 				"detector", activeDetector, "instanceType", n.InstanceType)
 		} else if len(alloc) == 0 {
@@ -655,7 +668,7 @@ func findTemplateForPod(pod *corev1.Pod, templates []v1alpha1.NodeGroupTemplate)
 			if taint.Effect != corev1.TaintEffectNoSchedule && taint.Effect != corev1.TaintEffectNoExecute {
 				continue
 			}
-			if !toleratesTaint(pod.Spec.Tolerations, taint) {
+			if !scheduling.TolerateTaint(pod.Spec.Tolerations, taint) {
 				taintsMatch = false
 				break
 			}
@@ -666,22 +679,6 @@ func findTemplateForPod(pod *corev1.Pod, templates []v1alpha1.NodeGroupTemplate)
 		return t
 	}
 	return nil
-}
-
-func toleratesTaint(tolerations []corev1.Toleration, taint corev1.Taint) bool {
-	for _, t := range tolerations {
-		if t.Operator == corev1.TolerationOpExists && (t.Key == "" || t.Key == taint.Key) {
-			if t.Effect == "" || t.Effect == taint.Effect {
-				return true
-			}
-		}
-		if t.Key == taint.Key && t.Value == taint.Value {
-			if t.Effect == "" || t.Effect == taint.Effect {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // findMatchingTemplate finds the first NodeGroupTemplate matching the inflight node.

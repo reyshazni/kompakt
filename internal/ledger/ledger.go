@@ -7,6 +7,8 @@ import (
 	"sync"
 
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/reyshazni/kompakt/internal/scheduling"
 )
 
 var errNoFit = errors.New("no node with sufficient capacity")
@@ -309,14 +311,14 @@ func (l *NodeLedger) Snapshot() LedgerSnapshot {
 }
 
 // HasInflightSignal returns true if there are in-flight nodes with unknown
-// capacity (empty allocatable). This indicates Layer 1 detected a scale-up
-// but Layer 2 hasn't provided capacity data yet. Used by WaitForScaleUp
-// to hold pods when a node is coming but capacity is unknown.
-func (l *NodeLedger) HasInflightSignal() bool {
+// capacity (empty allocatable) whose name starts with the given prefix.
+// This indicates Layer 1 detected a scale-up for a specific profile
+// but Layer 2 hasn't provided capacity data yet.
+func (l *NodeLedger) HasInflightSignal(prefix string) bool {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	for _, n := range l.inflight {
-		if len(n.allocatable) == 0 {
+	for name, n := range l.inflight {
+		if strings.HasPrefix(name, prefix) && len(n.allocatable) == 0 {
 			return true
 		}
 	}
@@ -375,18 +377,7 @@ func nodeMatchesConstraints(n *nodeEntry, constraints *PodSchedulingConstraints)
 	return true
 }
 
+// toleratesTaint delegates to the shared scheduling package.
 func toleratesTaint(tolerations []corev1.Toleration, taint corev1.Taint) bool {
-	for _, t := range tolerations {
-		if t.Operator == corev1.TolerationOpExists && (t.Key == "" || t.Key == taint.Key) {
-			if t.Effect == "" || t.Effect == taint.Effect {
-				return true
-			}
-		}
-		if t.Key == taint.Key && t.Value == taint.Value {
-			if t.Effect == "" || t.Effect == taint.Effect {
-				return true
-			}
-		}
-	}
-	return false
+	return scheduling.TolerateTaint(tolerations, taint)
 }
