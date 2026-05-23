@@ -1,3 +1,7 @@
+---
+description: Kompakt is a Kubernetes admission-time coordinator that prevents cluster autoscaler over-provisioning using scheduling gates. No custom scheduler, no privileged access.
+---
+
 # Kompakt
 
 **Keep your cluster compact.**

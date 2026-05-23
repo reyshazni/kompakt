@@ -1,3 +1,7 @@
+---
+description: How Kompakt uses a mutating webhook and coordination controller with scheduling gates to prevent Kubernetes autoscaler over-provisioning.
+---
+
 # How It Works
 
 ## The core idea

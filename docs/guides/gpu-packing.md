@@ -1,3 +1,7 @@
+---
+description: Prevent GPU node over-provisioning in Kubernetes with Kompakt. Supports NVIDIA device-plugin, Alibaba cGPU, HAMi, and KAI fractional GPU sharing.
+---
+
 # GPU Packing
 
 This guide covers how to use Kompakt to coordinate fractional GPU workloads and prevent over-provisioning of GPU nodes.

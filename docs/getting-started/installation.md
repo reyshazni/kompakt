@@ -1,3 +1,7 @@
+---
+description: Install Kompakt on Kubernetes 1.30+ using Helm or kustomize. One command to prevent cluster autoscaler over-provisioning.
+---
+
 # Installation
 
 ## What you need

@@ -1,3 +1,7 @@
+---
+description: Prevent double GPU node provisioning when scaling from zero in Kubernetes. Kompakt coordinates pods during scale-up to avoid redundant autoscaler decisions.
+---
+
 # Scale-from-zero GPU
 
 This guide walks through the most common Kompakt use case: preventing the cluster autoscaler from provisioning redundant GPU nodes when multiple pods arrive during a scale-up from zero.

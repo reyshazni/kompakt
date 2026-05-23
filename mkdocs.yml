@@ -1,6 +1,7 @@
 site_name: Kompakt
-site_url: https://reyshazni.github.io/kompakt
-site_description: Keep your cluster compact. Kubernetes admission-time coordinator that prevents autoscaler over-provisioning.
+site_url: https://reyshazni.github.io/kompakt/
+site_description: Kubernetes admission-time coordinator that prevents cluster autoscaler over-provisioning using scheduling gates. Zero scheduler integration.
+site_author: reyshazni
 repo_name: reyshazni/kompakt
 repo_url: https://github.com/reyshazni/kompakt
 edit_uri: edit/main/docs/
@@ -55,6 +56,7 @@ markdown_extensions:
 
 plugins:
   - search
+  - meta
 
 nav:
   - Home: index.md

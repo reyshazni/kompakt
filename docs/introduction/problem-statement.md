@@ -1,3 +1,7 @@
+---
+description: Why Kubernetes cluster autoscalers over-provision nodes and how scheduling gates solve the coordination gap across scan cycles and device-plugin resources.
+---
+
 # Problem Statement
 
 ## The coordination gap in Kubernetes autoscaling
