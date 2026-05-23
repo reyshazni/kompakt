@@ -57,27 +57,12 @@ spec:
 
 ### ResourceRequest
 
-Sums container `resources.requests` across all containers in the pod:
-
-```yaml
-demandSource:
-  type: ResourceRequest
-  resources: [cpu, memory]
-```
-
+Sums container `resources.requests` across all containers in the pod.
 Works with any standard Kubernetes resource name, including extended resources like `nvidia.com/gpu`.
 
 ### Annotation
 
-Reads demand from a pod annotation value:
-
-```yaml
-demandSource:
-  type: Annotation
-  annotation: aliyun.com/gpu-mem
-  unit: MiB
-```
-
+Reads demand from a pod annotation value.
 Used for GPU sharing systems (cGPU, HAMi, KAI) that express demand via annotations.
 
 ## CapacitySource
@@ -92,25 +77,12 @@ Used for GPU sharing systems (cGPU, HAMi, KAI) that express demand via annotatio
 
 ### NodeAllocatable
 
-Reads from `node.status.allocatable`:
-
-```yaml
-capacitySource:
-  type: NodeAllocatable
-  resources: [cpu, memory]
-```
+Reads from `node.status.allocatable`.
 
 ### NodeLabel
 
-Reads capacity from a node label. `perDeviceCount` tells Kompakt how many devices exist to calculate total capacity:
-
-```yaml
-capacitySource:
-  type: NodeLabel
-  label: aliyun.accelerator/gpu-memory-mib
-  perDeviceCount:
-    label: aliyun.accelerator/gpu-count
-```
+Reads capacity from a node label.
+`perDeviceCount` tells Kompakt how many devices exist to calculate total capacity.
 
 ## NodeGroupTemplate
 
@@ -196,23 +168,3 @@ Planned for future releases: `WaitForImagePrePull` (v0.2), `WaitForMIGProfile` (
 | `kompakt.io/gate-reason` | Annotation | Set by controller on release. Values: `capacity`, `timeout`, `priority`, `profile_not_found`. |
 | `kompakt.io/target-node` | Annotation | Set by controller on release with node affinity. The real node hostname. |
 | `kompakt.io/held-by` | Annotation | Set by controller while gated. The rule name currently holding (e.g., `WaitForNodeReady`). Removed on release. |
-
-## kubectl examples
-
-```bash
-# List all profiles
-kubectl get packingprofiles
-
-# Describe a profile
-kubectl describe packingprofile general-cpu-coordination
-
-# Get profiles with active gates
-kubectl get packingprofiles -o custom-columns=\
-NAME:.metadata.name,\
-GATES:.status.activeGates,\
-RESERVATIONS:.status.activeReservations
-
-# Find all gated pods
-kubectl get pods --all-namespaces -o json | \
-  jq -r '.items[] | select(.spec.schedulingGates) | "\(.metadata.namespace)/\(.metadata.name)"'
-```

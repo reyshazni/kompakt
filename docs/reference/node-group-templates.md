@@ -1,12 +1,6 @@
 # Node Group Templates Reference
 
-This page is the single reference for configuring `nodeGroupTemplates` in a PackingProfile. All guides link here rather than repeating the same instructions.
-
-## What nodeGroupTemplates are
-
-`nodeGroupTemplates` declare the expected capacity of nodes that do not yet exist. When the autoscaler is provisioning a new node, Kompakt cannot inspect its real resources (it has not joined the cluster yet). The template tells Kompakt what the node will have when it arrives.
-
-Without a template, Kompakt cannot match pending pods to in-flight nodes. The `WaitForNodeReady` rule requires at least one template to function.
+`nodeGroupTemplates` declare the expected capacity of nodes that do not yet exist. Without a template, Kompakt cannot match pending pods to in-flight nodes, and the `WaitForNodeReady` rule will not function.
 
 ## Schema
 
@@ -30,15 +24,7 @@ spec:
 
 ### namePrefix
 
-The prefix that matches the node group name in the autoscaler's status. Kompakt matches in-flight nodes to templates by checking if the node group name starts with this prefix.
-
-**How to find it:** Read the cluster autoscaler status ConfigMap:
-
-```bash
-kubectl get configmap cluster-autoscaler-status -n kube-system -o yaml
-```
-
-Look for `Name:` lines under `NodeGroups:`:
+The prefix that matches the node group name in the autoscaler's status. Kompakt matches in-flight nodes to templates by checking if the node group name starts with this prefix. Find it in the cluster autoscaler status ConfigMap (`kubectl get configmap cluster-autoscaler-status -n kube-system -o yaml`), under `NodeGroups:`:
 
 ```
 NodeGroups:
@@ -51,15 +37,11 @@ NodeGroups:
 
 Use the full name or a unique prefix: `pool-gpu-l20-2split` or `pool-gpu-l20`.
 
-**For GOATScaler (ACK):** The name prefix matches the scaling group name from `ProvisionNode` events. Check the GOATScaler component logs or the `ess-scalinggroup-id` label on existing nodes.
-
-**For Karpenter (planned):** Will match `NodeClaim` names.
+For GOATScaler (ACK), the prefix matches the scaling group name from `ProvisionNode` events. Check the GOATScaler component logs or the `ess-scalinggroup-id` label on existing nodes. For Karpenter (planned), it will match `NodeClaim` names.
 
 ### allocatable
 
-A map of resource names to their milliValues (int64). This represents the total allocatable capacity of the node for Kompakt's bin-packing calculations.
-
-**Unit conversion rules:**
+A map of resource names to their milliValues (int64), representing total allocatable capacity for bin-packing.
 
 | Resource type | Raw value | milliValue | Example |
 |---|---|---|---|
@@ -71,15 +53,7 @@ A map of resource names to their milliValues (int64). This represents the total 
 !!! note
     For annotation-based demand sources (cGPU), the allocatable value uses the same unit as the annotation. cGPU annotations are in MiB, so the template value is also in MiB (not milliValue).
 
-**How to find allocatable values:**
-
-Option 1 -- From an existing node of the same type:
-
-```bash
-kubectl get node <node-name> -o jsonpath='{.status.allocatable}' | jq
-```
-
-Option 2 -- From cloud provider documentation:
+Get allocatable values from an existing node (`kubectl get node <node-name> -o jsonpath='{.status.allocatable}' | jq`) or from cloud provider documentation:
 
 | Instance / GPU | CPU | Memory | GPU resource |
 |---|---|---|---|
@@ -89,19 +63,12 @@ Option 2 -- From cloud provider documentation:
 | p4d.24xlarge (EKS, A100x8) | 96000 | 1100000000000 | `nvidia.com/gpu: 8000` |
 | a2-highgpu-1g (GKE, A100x1) | 12000 | 85000000000 | `nvidia.com/gpu: 1000` |
 
-Option 3 -- From the autoscaler node template (if it includes the resource):
-
-```bash
-# CA exposes node templates in its status ConfigMap (some implementations)
-kubectl get configmap cluster-autoscaler-status -n kube-system -o yaml | grep -A 20 "Name: pool-gpu"
-```
-
 !!! warning
     Always use the **allocatable** value, not the **capacity** value. Allocatable = capacity minus system reserved. Using capacity overestimates what pods can actually use.
 
 ### labels (optional)
 
-Expected labels the node will have when it joins the cluster. Used by `FindFit` to match pods with `nodeSelector` requirements against in-flight nodes.
+Expected labels the node will have when it joins. Used by `FindFit` to match pods with `nodeSelector` requirements against in-flight nodes.
 
 ```yaml
 nodeGroupTemplates:
@@ -114,13 +81,7 @@ nodeGroupTemplates:
       gpu-type: l20
 ```
 
-**How to find expected labels:** Check an existing node from the same node pool:
-
-```bash
-kubectl get node <node-name> -o jsonpath='{.metadata.labels}' | jq
-```
-
-Only include labels that pods select on (via `nodeSelector` or `nodeAffinity`). Do not include all labels.
+Check an existing node from the same pool with `kubectl get node <node-name> -o jsonpath='{.metadata.labels}' | jq`. Only include labels that pods select on via `nodeSelector` or `nodeAffinity`.
 
 ### taints (optional)
 
@@ -143,11 +104,7 @@ nodeGroupTemplates:
         effect: NoSchedule
 ```
 
-**How to find expected taints:** Check the node pool configuration in your cloud console, or inspect an existing node:
-
-```bash
-kubectl get node <node-name> -o jsonpath='{.spec.taints}' | jq
-```
+Check the node pool configuration in your cloud console, or inspect an existing node with `kubectl get node <node-name> -o jsonpath='{.spec.taints}' | jq`.
 
 !!! important
     If your node pool has taints and you do not declare them in the template, Kompakt will reserve capacity on in-flight nodes for pods that cannot tolerate those taints. The pods will be released with node affinity but fail to schedule. Always declare taints that your node pool applies.

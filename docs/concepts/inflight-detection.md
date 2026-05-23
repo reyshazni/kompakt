@@ -35,25 +35,7 @@ Kompakt tries each detector in priority order on every reconcile cycle. Each det
 
 No configuration needed. On ACK, the CA detector finds no ConfigMap and returns nothing, then the GOATScaler detector finds `ProvisionNode` events and returns in-flight nodes. On EKS with CA, the CA detector finds the ConfigMap and wins immediately.
 
-You can see which detector is active via the PackingProfile status:
-
-```bash
-kubectl get packingprofile my-profile -o jsonpath='{.status.activeDetectors}'
-# ["goatscaler"]
-```
-
-Or in `kubectl describe`:
-
-```yaml
-status:
-  activeDetectors:
-    - goatscaler
-  inflightNodes: 2
-  conditions:
-    - type: InflightDetectionActive
-      status: "True"
-      message: "2 inflight node(s) detected by goatscaler"
-```
+Check which detector is active via `kubectl get packingprofile <name> -o jsonpath='{.status.activeDetectors}'`.
 
 ## Cluster Autoscaler detector
 
@@ -75,21 +57,7 @@ The instance type is matched against `nodeGroupTemplates` in the PackingProfile 
 
 ## Template enrichment
 
-Detected in-flight nodes often have unknown allocatable resources (the node does not exist yet, so there is nothing to read). The `nodeGroupTemplates` field in `capacitySource` provides this information:
-
-```yaml
-capacitySource:
-  type: NodeAllocatable
-  resources: [cpu, memory]
-  nodeGroupTemplates:
-    - instanceType: ecs.gn8is.4xlarge
-      allocatable:
-        aliyun.com/gpu-mem: 49152
-    - namePrefix: pool-cpu-4xlarge
-      allocatable:
-        cpu: 16000
-        memory: 64000000000
-```
+Detected in-flight nodes often have unknown allocatable resources (the node does not exist yet, so there is nothing to read). The `nodeGroupTemplates` field in `capacitySource` provides this information. See [Node Group Templates](../reference/node-group-templates.md) for configuration.
 
 Matching priority:
 

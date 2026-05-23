@@ -10,9 +10,7 @@
 6. **Push** to your fork
 7. **Open a PR** against `main`
 
-CI runs automatically on every PR. All checks must pass before merge.
-
-Direct pushes to `main` are restricted to maintainers.
+CI runs automatically on every PR. All checks must pass before merge. Direct pushes to `main` are restricted to maintainers.
 
 ## Prerequisites
 
@@ -27,7 +25,6 @@ Direct pushes to `main` are restricted to maintainers.
 ## Clone and build
 
 ```bash
-# Fork first, then:
 git clone https://github.com/<your-username>/kompakt.git
 cd kompakt
 make deps
@@ -37,27 +34,16 @@ make build
 ## Run tests
 
 ```bash
-# Unit tests
-make test
-
-# Specific package
-go test ./internal/ledger/...
-
-# E2e tests (requires kind cluster)
-make kind-create
-make test-e2e
+make test                          # unit tests
+go test ./internal/ledger/...      # specific package
+make kind-create && make test-e2e  # e2e tests (requires kind)
 ```
 
 ## Run locally
 
 ```bash
-# Create a kind cluster
 make kind-create
-
-# Install CRDs
 make install
-
-# Run the controller locally (connects to kind)
 make run
 ```
 
@@ -77,22 +63,11 @@ All development follows RED, GREEN, REFACTOR:
 2. **GREEN**: Write the minimum code to make the test pass. Nothing more.
 3. **REFACTOR**: Clean up the implementation while keeping tests green.
 
-Rules:
-
-- Never write implementation code without a failing test
-- Run `go test ./path/to/package/...` after each step
-- Do not run the full test suite on every edit. Only run the package you are working on.
-- Full `make verify` runs before pushing
+Run `go test ./path/to/package/...` after each step. Full `make verify` before pushing.
 
 ## Pre-commit verification
 
-Before every commit, run the full validation suite:
-
-```bash
-make verify
-```
-
-This runs fmt, vet, lint, unit tests, helm lint, and kustomize build. All must pass.
+Before every commit, run `make verify` (fmt, vet, lint, unit tests, helm lint, kustomize build). All must pass.
 
 ## CI checks
 
@@ -134,21 +109,12 @@ Every PR is validated by these checks (all must pass):
 | `make open-docs` | Serve docs locally at localhost:4400 |
 
 ## Code conventions
-
-- Follow upstream Kubernetes Go conventions
 - Use structured logging via `logr`
 - All reconciler logic must be idempotent
-- Webhook p99 latency under 50ms
 - CRD field names: camelCase in JSON, PascalCase in Go
 - Error messages: lowercase, no trailing punctuation
 - Test files colocated: `foo.go` -> `foo_test.go`
-- No em dashes (U+2014, U+2013) anywhere
-- No ASCII art or box-drawing characters
 
 ## Docs
 
-```bash
-make open-docs
-```
-
-Docs are served at `http://localhost:4400`. Changes to `docs/` or `mkdocs.yml` auto-deploy to GitHub Pages on merge to `main`.
+Run `make open-docs` to serve docs at `http://localhost:4400`. Changes to `docs/` or `mkdocs.yml` auto-deploy to GitHub Pages on merge to `main`.

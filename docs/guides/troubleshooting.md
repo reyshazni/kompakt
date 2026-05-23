@@ -113,3 +113,34 @@ kubectl get pods --all-namespaces -o json | \
 # Step 3: Full cleanup (optional)
 helm uninstall kompakt -n kompakt-system
 ```
+
+## Installation issues
+
+### Controller pod is not starting
+
+Check the logs:
+
+```bash
+kubectl logs -n kompakt-system -l app.kubernetes.io/name=kompakt
+```
+
+Look for `"certs provisioned successfully"`. If you see that, the controller started correctly and the issue is elsewhere.
+
+### Pod shows CrashLoopBackOff
+
+This usually means the controller crashed during startup. Common causes:
+
+- **Read-only file system in logs**: The deployment is missing the `emptyDir` volume mount for `/tmp/k8s-webhook-server/serving-certs`. This is included in the default Helm chart and kustomize manifests.
+- **RBAC errors in logs**: The controller needs permission to create Secrets and patch the webhook configuration. Re-apply the manifests to ensure RBAC is up to date.
+
+### Pods are not being gated
+
+If you created a PackingProfile and labeled your pods but they are not getting scheduling gates:
+
+1. Check that the webhook is registered: `kubectl get mutatingwebhookconfiguration`
+2. Check that your pod has the `packer.kompakt.io/packing-profile` label set to a valid PackingProfile name
+3. Check controller logs for errors
+
+### Webhook returns connection refused
+
+The controller needs a few seconds after startup to generate certs and start the TLS server. During this window, the webhook has `failurePolicy: Ignore`, meaning pods pass through ungated. This resolves itself within seconds.

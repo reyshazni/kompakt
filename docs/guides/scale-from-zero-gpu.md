@@ -4,7 +4,7 @@ This guide walks through the most common Kompakt use case: preventing the cluste
 
 ## When you need this
 
-Your GPU node pool scales to zero when idle to save cost. When users request GPU workloads (notebooks, inference, training), the autoscaler provisions new GPU nodes. If multiple requests arrive within the same autoscaler scan cycle (~30s), each one triggers a separate node -- even when they could share.
+Your GPU node pool scales to zero when idle to save cost. When users request GPU workloads (notebooks, inference, training), the autoscaler provisions new GPU nodes. If multiple requests arrive within the same autoscaler scan cycle (~30s), each one triggers a separate node, even when they could share.
 
 ## Prerequisites
 
@@ -108,7 +108,7 @@ kubectl apply -f packingprofile.yaml
 
 ### 2. Label your workloads
 
-Add the profile label to your notebook Deployment, StatefulSet, or any workload that creates pods. The `aliyun.com/gpu-mem` annotation is set by your platform (JupyterHub, KubeFlow, etc.) -- Kompakt reads it but does not create it.
+Add the profile label to your notebook Deployment, StatefulSet, or any workload that creates pods. The `aliyun.com/gpu-mem` annotation is set by your platform (JupyterHub, KubeFlow, etc.). Kompakt reads it but does not create it.
 
 ```yaml
 apiVersion: apps/v1

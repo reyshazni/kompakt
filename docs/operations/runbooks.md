@@ -50,7 +50,7 @@ kubectl logs -n kompakt-system -l app.kubernetes.io/name=kompakt --tail=200 | gr
 
 ### Resolution
 
-If the controller is healthy and working through the queue, no action needed -- the alert will self-resolve as pods are released.
+If the controller is healthy and working through the queue, no action needed. The alert will self-resolve as pods are released.
 
 If the controller is down or stuck, restart it:
 
@@ -136,7 +136,7 @@ for: 10m
 
 **What it means:** Pods are consistently hitting their `reservationTimeout` and being released without confirmed capacity. The system is failing to find a placement within the reservation window.
 
-**Severity:** Warning. Pods are released (not stuck), but they are released uncoordinated -- the autoscaler will provision for them individually, which is exactly the over-provisioning Kompakt is supposed to prevent.
+**Severity:** Warning. Pods are released (not stuck), but they are released uncoordinated. The autoscaler will provision for them individually, which is exactly the over-provisioning Kompakt is supposed to prevent.
 
 ### Diagnosis
 
@@ -176,7 +176,7 @@ kubectl patch packingprofile <name> --type=merge \
   -p '{"spec":{"reservationTimeout":"5m"}}'
 ```
 
-If nodes are genuinely unavailable (no stock), the timeout fallback is correct behavior -- pods should be released to give the autoscaler a chance with different node groups.
+If nodes are genuinely unavailable (no stock), the timeout fallback is correct behavior. Pods should be released to give the autoscaler a chance with different node groups.
 
 ---
 
@@ -252,7 +252,7 @@ alert: KompaktNoInflightDetection
 expr: kompakt_ledger_inflight_nodes == 0 and kompakt_gated_pods > 0
 for: 5m
 annotations:
-  summary: Pods are gated but no in-flight nodes detected -- WaitForNodeReady cannot make decisions
+  summary: Pods are gated but no in-flight nodes detected, WaitForNodeReady cannot make decisions
 ```
 
 ### KompaktWebhookDown

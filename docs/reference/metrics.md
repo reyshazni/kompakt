@@ -1,10 +1,6 @@
 # Prometheus Metrics
 
-All metrics use the `kompakt_` prefix and are served on port `8080` at `/metrics`.
-
-In addition to the custom metrics below, Kompakt exposes standard controller-runtime
-metrics (`controller_runtime_reconcile_total`, `controller_runtime_webhook_latency_seconds`,
-`workqueue_*`, etc.) which are not listed here.
+All metrics use the `kompakt_` prefix and are served on port `8080` at `/metrics`. Kompakt also exposes standard controller-runtime metrics (`controller_runtime_reconcile_total`, `controller_runtime_webhook_latency_seconds`, `workqueue_*`, etc.) which are not listed here.
 
 ## Webhook
 
@@ -51,32 +47,16 @@ All labels are bounded:
 
 Pod name, node name, and UID are never used as labels.
 
-## Key Metrics to Monitor
-
-**`kompakt_gated_pods`**: If this grows unboundedly, pods are stuck. Alert if it exceeds
-a threshold for your cluster size.
-
-**`kompakt_gate_hold_duration_seconds`**: If p99 consistently hits your `reservationTimeout`,
-either the timeout is too low or capacity is genuinely unavailable. Check
-`kompakt_ledger_inflight_nodes` to verify in-flight detection is working.
-
-**`kompakt_webhook_request_duration_seconds`**: Should stay under 50ms p99.
-
-**`kompakt_gate_releases_total{reason="timeout"}`**: Non-zero means the system is failing
-to find capacity within the reservation window.
-
 ## PromQL Query Examples
 
 ### Webhook performance
 
 ```promql
-# Webhook p99 latency (should be <50ms)
+# Webhook p99 latency
 histogram_quantile(0.99, rate(kompakt_webhook_request_duration_seconds_bucket[5m]))
-
 # Webhook request rate by operation
 sum(rate(kompakt_webhook_requests_total[5m])) by (operation)
-
-# Webhook error ratio (reject / total)
+# Webhook reject ratio
 sum(rate(kompakt_webhook_requests_total{operation="reject"}[5m]))
 /
 sum(rate(kompakt_webhook_requests_total[5m]))
@@ -87,16 +67,13 @@ sum(rate(kompakt_webhook_requests_total[5m]))
 ```promql
 # Current gated pods by profile
 sum(kompakt_gated_pods) by (profile)
-
-# Gate hold duration p50 / p90 / p99 by profile
+# Gate hold duration p50 / p90 / p99
 histogram_quantile(0.50, rate(kompakt_gate_hold_duration_seconds_bucket[5m])) by (profile)
 histogram_quantile(0.90, rate(kompakt_gate_hold_duration_seconds_bucket[5m])) by (profile)
 histogram_quantile(0.99, rate(kompakt_gate_hold_duration_seconds_bucket[5m])) by (profile)
-
-# Gate release rate by reason (capacity vs timeout vs priority)
+# Gate release rate by reason
 sum(rate(kompakt_gate_releases_total[5m])) by (reason)
-
-# Timeout ratio (fraction of gates released by timeout, not by capacity)
+# Timeout ratio
 sum(rate(kompakt_gate_releases_total{reason="timeout"}[5m]))
 /
 sum(rate(kompakt_gate_releases_total[5m]))
@@ -105,16 +82,13 @@ sum(rate(kompakt_gate_releases_total[5m]))
 ### Ledger health
 
 ```promql
-# Current node count (existing + inflight)
+# Node count (existing + inflight)
 kompakt_ledger_nodes + on() sum(kompakt_ledger_inflight_nodes)
-
-# In-flight nodes by detection source
+# In-flight nodes by source
 kompakt_ledger_inflight_nodes
-
-# Total allocatable CPU across tracked nodes (cores)
+# Allocatable CPU (cores)
 kompakt_ledger_allocatable_millicores / 1000
-
-# Total allocatable memory across tracked nodes (GiB)
+# Allocatable memory (GiB)
 kompakt_ledger_allocatable_memory_bytes / 1073741824
 ```
 
@@ -123,31 +97,25 @@ kompakt_ledger_allocatable_memory_bytes / 1073741824
 ```promql
 # Rule evaluation rate by rule and result
 sum(rate(kompakt_rule_evaluations_total[5m])) by (rule, result)
-
-# Rule hold ratio (how often rules hold vs release)
+# Rule hold ratio
 sum(rate(kompakt_rule_evaluations_total{result="hold"}[5m])) by (rule)
 /
 sum(rate(kompakt_rule_evaluations_total[5m])) by (rule)
-
 # Rule evaluation p99 latency
 histogram_quantile(0.99, rate(kompakt_rule_evaluation_duration_seconds_bucket[5m])) by (rule)
 ```
 
-### Cost effectiveness
-
+### Cost
 ```promql
-# Pods saved from triggering redundant scale-ups (gates released with capacity, not timeout)
+# Pods released with existing capacity (24h)
 sum(increase(kompakt_gate_releases_total{reason="capacity"}[24h]))
-
-# Timeout rate over 24h (lower is better)
+# Timeout rate (24h)
 sum(increase(kompakt_gate_releases_total{reason="timeout"}[24h]))
 /
 sum(increase(kompakt_gate_releases_total[24h]))
 ```
 
 ## Grafana Dashboard
-
-Import the following panels into your Grafana instance. Each panel maps to one of the queries above.
 
 ### Recommended dashboard layout
 

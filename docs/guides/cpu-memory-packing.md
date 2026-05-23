@@ -241,7 +241,7 @@ spec:
   reservationTimeout: 5m
 ```
 
-The latency-sensitive profile uses BinPack only with a short timeout -- pods either fit on existing capacity or fall through fast. The batch profile uses both rules with a longer timeout to fully coordinate scale-ups.
+The latency-sensitive profile uses BinPack only with a short timeout. Pods either fit on existing capacity or fall through fast. The batch profile uses both rules with a longer timeout to fully coordinate scale-ups.
 
 ## Tuning the reservation timeout
 

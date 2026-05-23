@@ -35,8 +35,6 @@ The algorithm:
 4. If a fit is found, reserve the capacity and release the gate with node affinity
 5. If no fit exists, keep the gate
 
-This rule handles both CPU/memory and fractional GPU workloads. The demand and capacity sources determine what resources are considered.
-
 **Gate name**: `kompakt.io/wait-for-workload-packing`
 
 ### WaitForNodeReady
@@ -47,23 +45,11 @@ Coordinates pods during node scale-up events. Prevents the cluster autoscaler fr
 
 Three-state decision logic:
 
-1. **No capacity anywhere** (no existing nodes fit, no in-flight nodes): release the gate immediately. The pod becomes visible to the autoscaler and triggers a scale-up. This is the "first mover" -- someone has to signal the autoscaler.
+1. **No capacity anywhere** (no existing nodes fit, no in-flight nodes): release the gate immediately. The pod becomes visible to the autoscaler and triggers a scale-up. This is the "first mover": someone has to signal the autoscaler.
 2. **In-flight node can fit**: hold the gate and reserve capacity on the incoming node. The pod stays invisible to the autoscaler, preventing a redundant scale-up. When the node becomes Ready, the controller re-evaluates and releases with real node affinity.
 3. **Existing node can fit**: release the gate with node affinity to the real node.
 
-Use `capacitySource.nodeGroupTemplates` to declare expected allocatable resources for each node group. Without templates, in-flight nodes have unknown capacity and pods cannot be matched to them.
-
-```yaml
-capacitySource:
-  type: NodeAllocatable
-  resources: [cpu, memory]
-  nodeGroupTemplates:
-    - namePrefix: pool-gpu
-      allocatable:
-        cpu: 16000
-        memory: 64000000000
-        aliyun.com/gpu-mem: 49152
-```
+Configure `nodeGroupTemplates` in your profile to declare expected capacity. See [Node Group Templates](../reference/node-group-templates.md).
 
 **Gate name**: `kompakt.io/wait-for-node-ready`
 
@@ -79,26 +65,6 @@ spec:
 ```
 
 In this example, BinPack runs first. If an existing node has capacity, the pod is released immediately. If not, WaitForNodeReady evaluates next: passthrough if nothing is coming, hold if an in-flight node can fit.
-
-The gate names for each rule are injected independently, so you can see which rule is still holding a pod:
-
-```bash
-kubectl get pod my-pod -o jsonpath='{.spec.schedulingGates[*].name}'
-# kompakt.io/wait-for-workload-packing kompakt.io/wait-for-node-ready
-```
-
-As each rule is satisfied, its gate is removed. The pod schedules once all gates are gone.
-
-## Gate naming convention
-
-All Kompakt gates use the `kompakt.io/` prefix:
-
-| Gate name | Rule |
-|---|---|
-| `kompakt.io/wait-for-workload-packing` | WaitForWorkloadPacking |
-| `kompakt.io/wait-for-node-ready` | WaitForNodeReady |
-
-This makes it easy to identify which Kompakt rule is holding each pod.
 
 ## Roadmap
 

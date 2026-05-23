@@ -16,50 +16,27 @@ In production, all three assumptions routinely break. The result is over-provisi
 
 ### Mode 1: Cross-cycle demand fragmentation
 
-The autoscaler evaluates pending pods in discrete scan cycles. Pods that arrive in different cycles are not batched together. Each cycle independently decides whether to scale up.
+The autoscaler evaluates pending pods in discrete scan cycles. Pods that arrive in different cycles are never batched together.
 
 **Concrete example**: Two services scale simultaneously during a traffic spike. Service A's pods arrive at T+0, Service B's pods arrive at T+12s. The autoscaler sees A's pods in cycle 1, triggers node-1. In cycle 2, it sees B's pods. Node-1 is still provisioning (NotReady). The autoscaler's simulation may or may not account for it depending on implementation. If it does not, it triggers node-2. Both services could have fit on node-1.
 
 ### Mode 2: Incomplete node template simulation
 
-When the autoscaler simulates whether a pending pod fits on an upcoming node, it uses a **node template** -- a static declaration of what resources the node will have. This template is derived from the node group configuration.
+The autoscaler simulates fit using a **node template**, a static declaration derived from the node group configuration. It only contains resources the cloud provider declares at the infrastructure level (CPU, memory, ephemeral storage), not resources registered dynamically after boot:
 
-The template is incomplete by definition. It only contains resources the cloud provider declares at the infrastructure level: CPU, memory, ephemeral storage. It does not contain:
-
-- GPU memory partitions added by device plugins after boot (cGPU `aliyun.com/gpu-mem`, HAMi annotations)
-- Extended resources registered dynamically (NVIDIA device plugin `nvidia.com/gpu` counts for time-slicing)
+- GPU memory partitions from device plugins (cGPU `aliyun.com/gpu-mem`, HAMi annotations)
+- Extended resources from NVIDIA device plugin (`nvidia.com/gpu` counts for time-slicing)
 - Custom resources from DaemonSets that register after node join
-- Labels and annotations added by node initializers
 
-**Concrete example**: A GPU node pool uses Alibaba cGPU with 2-split (each pod gets half a GPU). Pods request `aliyun.com/gpu-mem: 24576`. The node template does not declare `gpu-mem` because it is a device-plugin annotation, not an infrastructure resource. The autoscaler sees a pending pod requesting a resource that zero existing or upcoming nodes have. It provisions a new node every time, regardless of actual capacity.
+**Concrete example**: A GPU node pool uses Alibaba cGPU with 2-split (each pod gets half a GPU). Pods request `aliyun.com/gpu-mem: 24576`. The node template does not declare `gpu-mem` because it is a device-plugin annotation, not an infrastructure resource. The autoscaler provisions a new node every time, regardless of actual capacity.
 
 ### Mode 3: Scale-from-zero information vacuum
 
-When a node pool has zero nodes, the autoscaler has no running node to inspect. It relies entirely on the node template. Combined with Mode 2, this creates a complete information vacuum: the autoscaler cannot determine whether the upcoming node will satisfy the pending pod's custom resource requests.
+When a node pool has zero nodes, the autoscaler relies entirely on the node template. Combined with Mode 2, it cannot determine whether the upcoming node will satisfy custom resource requests.
 
 **Concrete example**: GPU node pool scaled to zero. Notebook A arrives, triggers scale-up. Notebook B arrives 15 seconds later. The autoscaler cannot simulate whether B fits on the upcoming node (no gpu-mem in template). It triggers a second node. Cost doubles for no reason.
 
-## Why existing tools do not solve this
-
-### Cluster Autoscaler alone
-
-The Cluster Autoscaler is fundamentally reactive and per-cycle. It has no mechanism to coordinate demand across time. Its "upcoming node" simulation helps within a single cycle but cannot help across cycles, and fails entirely for resources not in the node template.
-
-### Karpenter alone
-
-Karpenter consolidates pending pods before provisioning, which helps within a single evaluation pass. However, it faces the same cross-cycle problem: pods arriving after the provisioning decision cannot be retroactively included. Karpenter also does not solve the device-plugin resource gap.
-
-### Volcano / Scheduling frameworks
-
-Volcano and similar batch schedulers solve a different problem: they coordinate pod groups that must be scheduled atomically (gang scheduling). They replace or extend kube-scheduler. They do not address autoscaler over-provisioning because by the time the scheduler sees the pods, the autoscaler has already made its provisioning decision.
-
-### Kueue
-
-Kueue manages resource quotas and admission control. It gates workloads (not pods) based on cluster-level resource budgets. It does not make node-level placement decisions and does not interact with the autoscaler's provisioning logic. Kueue answers "does the cluster have quota for this workload?" not "which specific node should this pod wait for?"
-
-### Custom scheduler
-
-Replacing or extending kube-scheduler does not help because the scheduling phase happens after the autoscaler's provisioning phase. By the time a custom scheduler evaluates a pod, redundant nodes have already been requested. Additionally, custom schedulers add operational complexity, vendor lock-in, and upgrade friction.
+For how existing tools compare, see [Prior Art & Alternatives](prior-art.md).
 
 ## The insight
 

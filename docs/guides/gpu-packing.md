@@ -4,7 +4,7 @@ This guide covers how to use Kompakt to coordinate fractional GPU workloads and 
 
 ## When you need this
 
-Multiple GPU workloads arrive at the same time (or within the same autoscaler scan cycle), and the cluster autoscaler provisions a separate GPU node for each one -- even when they could share. GPU nodes are expensive; even one extra node is significant cost.
+Multiple GPU workloads arrive at the same time (or within the same autoscaler scan cycle), and the cluster autoscaler provisions a separate GPU node for each one, even when they could share. GPU nodes are expensive; even one extra node is significant cost.
 
 Common scenarios:
 
@@ -106,7 +106,7 @@ This works for both whole-GPU requests and NVIDIA time-slicing (where `nvidia.co
 
 This section assumes you have Alibaba cGPU installed on your ACK cluster. cGPU is installed via the ACK console under "Manage System Components" or via the cGPU Helm chart. Once installed, it provides the `aliyun.com/gpu-mem` annotation for GPU memory sharing and adds `aliyun.accelerator/gpu-memory-mib` and `aliyun.accelerator/gpu-count` labels to GPU nodes.
 
-cGPU expresses GPU memory demand via pod annotations and node capacity via node labels. The cluster autoscaler does not understand these annotations, which makes over-provisioning especially severe -- this is the primary use case for Kompakt.
+cGPU expresses GPU memory demand via pod annotations and node capacity via node labels. The cluster autoscaler does not understand these annotations, which makes over-provisioning especially severe. This is the primary use case for Kompakt.
 
 ### 1. Create the profile
 
