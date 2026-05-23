@@ -8,6 +8,8 @@ Kompakt is a Kubernetes admission-time coordinator that prevents cluster autosca
 - No privileged DaemonSets
 - No vendor lock-in
 
+![Without vs With Kompakt](diagrams/07-without-vs-with-kompakt.svg)
+
 ## The problem
 
 The cluster autoscaler evaluates pending pods in scan cycles (every 10-30 seconds). Pods that arrive in different cycles are not batched together. When a node is being provisioned but not yet Ready, the autoscaler simulates whether pending pods will fit on it -- but this simulation only works for resources declared in the node template.
