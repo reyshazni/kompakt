@@ -22,7 +22,6 @@ metadata:
 spec:
   demandSource:
     type: ResourceRequest
-    resources: [cpu, memory]
   capacitySource:
     type: NodeAllocatable
     resources: [cpu, memory]
@@ -51,14 +50,15 @@ spec:
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `type` | string | Yes | `ResourceRequest` or `Annotation` |
-| `resources` | []string | When type=ResourceRequest | Resource names to sum from container requests (e.g., `[cpu, memory]`) |
+| `additionalResources` | []string | No | Extended resource names to track beyond cpu and memory (e.g., `[nvidia.com/gpu]`). CPU and memory are always tracked implicitly. |
+| `resources` | []string | No | **Deprecated.** Use `additionalResources` instead. |
 | `annotation` | string | When type=Annotation | Pod annotation key holding the demand value |
 | `unit` | string | When type=Annotation | Unit of the annotation value (e.g., `MiB`, `cores`) |
 
 ### ResourceRequest
 
 Sums container `resources.requests` across all containers in the pod.
-Works with any standard Kubernetes resource name, including extended resources like `nvidia.com/gpu`.
+CPU and memory are always tracked implicitly. To track extended resources (e.g., `nvidia.com/gpu`), list them in `additionalResources`.
 
 ### Annotation
 
@@ -154,7 +154,7 @@ Planned for future releases: `WaitForImagePrePull` (v0.2), `WaitForMIGProfile` (
 |---|---|---|
 | `activeGates` | int32 | Number of pods currently gated by this profile |
 | `inflightNodes` | int32 | Number of in-flight nodes detected |
-| `activeDetectors` | []string | Which inflight detector found nodes (e.g., `["goatscaler"]`) |
+| `activeDetectors` | []string | Which in-flight detector found nodes (e.g., `["goatscaler"]`) |
 | `conditions` | []metav1.Condition | Standard Kubernetes conditions (Ready, ProfileValid, LedgerReady, InflightDetectionActive) |
 
 ## Pod labels and annotations

@@ -14,7 +14,6 @@ metadata:
 spec:
   demandSource:
     type: ResourceRequest
-    resources: [cpu, memory]
 
   capacitySource:
     type: NodeAllocatable

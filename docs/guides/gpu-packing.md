@@ -58,7 +58,7 @@ metadata:
 spec:
   demandSource:
     type: ResourceRequest
-    resources: [nvidia.com/gpu, memory]
+    additionalResources: [nvidia.com/gpu]
   capacitySource:
     type: NodeAllocatable
     resources: [nvidia.com/gpu, memory]
@@ -188,7 +188,7 @@ metadata:
 spec:
   demandSource:
     type: ResourceRequest
-    resources: [nvidia.com/gpu]
+    additionalResources: [nvidia.com/gpu]
   capacitySource:
     type: NodeAllocatable
     resources: [nvidia.com/gpu]

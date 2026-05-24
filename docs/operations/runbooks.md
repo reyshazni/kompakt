@@ -45,7 +45,7 @@ kubectl logs -n kompakt-system -l app.kubernetes.io/name=kompakt --tail=200 | gr
 |---|---|---|
 | Controller crashed / OOMKilled | Pod in CrashLoopBackOff | Increase memory limit, check logs for panic |
 | Leader election lost | Lease holder differs from running pod | Wait for re-election (~15s) or restart pod |
-| No capacity anywhere | Ledger has 0 nodes, 0 inflight | Autoscaler may be at max. Check node pool limits |
+| No capacity anywhere | Ledger has 0 nodes, 0 in-flight | Autoscaler may be at max. Check node pool limits |
 | In-flight detection broken | Autoscaler provisioning but `kompakt_ledger_inflight_nodes` (in-flight nodes the system is tracking as being provisioned but not yet Ready) = 0 | Check adapter (CA ConfigMap exists? GOATScaler events firing?) |
 | Reservation timeout too high | Pods gated for longer than node provisioning time | Lower `reservationTimeout` in the profile |
 | Burst of demand | Legitimate burst, controller working through queue | Wait. Check if `kompakt_gated_pods` is decreasing |
@@ -219,7 +219,7 @@ kubectl logs -n kompakt-system -l app.kubernetes.io/name=kompakt --tail=200 | gr
 | Normal GPU node provisioning | GPU nodes take 3-5 min, hold is 2-3 min | Adjust alert threshold for GPU profiles, or suppress for GPU |
 | Node stuck provisioning | In-flight node never transitions to Ready | Check cloud provider console for stuck instances |
 | Slow device plugin registration | Node is Ready but `requiredLabels` not yet present | Check device plugin DaemonSet health on new nodes |
-| Inflight node not transitioning | Node arrived but ledger still shows inflight | Check transition tracking (provision-task-id label matching) |
+| In-flight node not transitioning | Node arrived but ledger still shows in-flight | Check transition tracking (provision-task-id label matching) |
 
 ### Resolution
 

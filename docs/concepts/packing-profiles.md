@@ -30,10 +30,11 @@ A PackingProfile answers three questions: What does this pod need? (`demandSourc
 
 ## Demand source
 
-Extracts resource demand from container resource requests or a pod annotation.
+Extracts resource demand from container resource requests or a pod annotation. CPU and memory are always tracked implicitly. For extended resources beyond cpu and memory, use `additionalResources`.
 
 ```yaml
-demandSource: { type: ResourceRequest, resources: [cpu, memory] }
+demandSource: { type: ResourceRequest }
+demandSource: { type: ResourceRequest, additionalResources: [nvidia.com/gpu] }
 demandSource: { type: Annotation, annotation: aliyun.com/gpu-mem, unit: MiB }
 ```
 

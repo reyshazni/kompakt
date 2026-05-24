@@ -43,7 +43,6 @@ metadata:
 spec:
   demandSource:
     type: ResourceRequest
-    resources: [cpu, memory]
   capacitySource:
     type: NodeAllocatable
     resources: [cpu, memory]
@@ -68,7 +67,6 @@ metadata:
 spec:
   demandSource:
     type: ResourceRequest
-    resources: [cpu, memory]
   capacitySource:
     type: NodeAllocatable
     resources: [cpu, memory]
@@ -100,7 +98,6 @@ metadata:
 spec:
   demandSource:
     type: ResourceRequest
-    resources: [cpu, memory]
   capacitySource:
     type: NodeAllocatable
     resources: [cpu, memory]
@@ -205,7 +202,6 @@ metadata:
 spec:
   demandSource:
     type: ResourceRequest
-    resources: [cpu, memory]
   capacitySource:
     type: NodeAllocatable
     resources: [cpu, memory]
@@ -225,7 +221,6 @@ metadata:
 spec:
   demandSource:
     type: ResourceRequest
-    resources: [cpu, memory]
   capacitySource:
     type: NodeAllocatable
     resources: [cpu, memory]

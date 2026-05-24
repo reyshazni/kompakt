@@ -58,7 +58,7 @@ Adjust with the `--zap-log-level` flag on the manager binary:
 | Flag | Level | What you see |
 |---|---|---|
 | `--zap-log-level=0` | Info (default) | Gate injected, gate released, errors |
-| `--zap-log-level=1` | V(1) | + inflight detection failures, unknown rule names |
+| `--zap-log-level=1` | V(1) | + in-flight detection failures, unknown rule names |
 | `--zap-log-level=3` | V(3) | + rule evaluation details, ledger sync stats |
 | `--zap-log-level=4` | V(4) | + bin-packing algorithm steps (very verbose) |
 
