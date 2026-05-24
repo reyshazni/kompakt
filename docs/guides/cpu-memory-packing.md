@@ -45,7 +45,6 @@ spec:
     type: ResourceRequest
   capacitySource:
     type: NodeAllocatable
-    resources: [cpu, memory]
   readinessSignal:
     nodeConditions:
       - type: Ready
@@ -69,7 +68,6 @@ spec:
     type: ResourceRequest
   capacitySource:
     type: NodeAllocatable
-    resources: [cpu, memory]
     nodeGroupTemplates:
       - namePrefix: pool-cpu-4xlarge
         allocatable:
@@ -100,7 +98,6 @@ spec:
     type: ResourceRequest
   capacitySource:
     type: NodeAllocatable
-    resources: [cpu, memory]
     nodeGroupTemplates:
       - namePrefix: pool-cpu-4xlarge
         allocatable:
@@ -204,7 +201,6 @@ spec:
     type: ResourceRequest
   capacitySource:
     type: NodeAllocatable
-    resources: [cpu, memory]
   readinessSignal:
     nodeConditions:
       - type: Ready
@@ -223,7 +219,6 @@ spec:
     type: ResourceRequest
   capacitySource:
     type: NodeAllocatable
-    resources: [cpu, memory]
     nodeGroupTemplates:
       - namePrefix: pool-batch
         allocatable:

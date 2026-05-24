@@ -61,7 +61,6 @@ spec:
     additionalResources: [nvidia.com/gpu]
   capacitySource:
     type: NodeAllocatable
-    resources: [nvidia.com/gpu, memory]
     nodeGroupTemplates:
       - namePrefix: pool-a100
         allocatable:
@@ -191,7 +190,6 @@ spec:
     additionalResources: [nvidia.com/gpu]
   capacitySource:
     type: NodeAllocatable
-    resources: [nvidia.com/gpu]
   readinessSignal:
     nodeConditions:
       - type: Ready

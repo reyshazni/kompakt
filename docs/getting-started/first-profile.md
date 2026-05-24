@@ -17,7 +17,6 @@ spec:
 
   capacitySource:
     type: NodeAllocatable
-    resources: [cpu, memory]
 
   readinessSignal:
     nodeConditions:

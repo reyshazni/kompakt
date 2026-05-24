@@ -24,7 +24,6 @@ spec:
     type: ResourceRequest
   capacitySource:
     type: NodeAllocatable
-    resources: [cpu, memory]
   readinessSignal:
     nodeConditions:
       - type: Ready
@@ -70,14 +69,13 @@ Used for GPU sharing systems (cGPU, HAMi, KAI) that express demand via annotatio
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `type` | string | Yes | `NodeAllocatable` or `NodeLabel` |
-| `resources` | []string | When type=NodeAllocatable | Resource names to read from node allocatable |
 | `label` | string | When type=NodeLabel | Node label key holding total capacity |
 | `perDeviceCount` | [LabelRef](#labelref) | No | Node label indicating device count (for fractional GPU) |
 | `nodeGroupTemplates` | [][NodeGroupTemplate](#nodegrouptemplate) | No | Expected allocatable for in-flight nodes by group name prefix |
 
 ### NodeAllocatable
 
-Reads from `node.status.allocatable`.
+Reads all resources from `node.status.allocatable`. CPU, memory, and any extended resources (e.g., `nvidia.com/gpu`) are tracked automatically.
 
 ### NodeLabel
 
@@ -96,7 +94,6 @@ Used by the `WaitForNodeReady` rule to populate capacity on in-flight nodes dete
 ```yaml
 capacitySource:
   type: NodeAllocatable
-  resources: [cpu, memory]
   nodeGroupTemplates:
     - namePrefix: pool-gpu
       allocatable:

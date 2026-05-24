@@ -43,7 +43,7 @@ demandSource: { type: Annotation, annotation: aliyun.com/gpu-mem, unit: MiB }
 Determines node capacity from `node.status.allocatable` or a node label.
 
 ```yaml
-capacitySource: { type: NodeAllocatable, resources: [cpu, memory] }
+capacitySource: { type: NodeAllocatable }
 capacitySource: { type: NodeLabel, label: aliyun.accelerator/gpu-memory-mib,
   perDeviceCount: { label: aliyun.accelerator/gpu-count } }
 ```
