@@ -100,7 +100,7 @@ Before applying, replace these values with your own:
 
 Key fields explained:
 
-- **`nodeGroupTemplates`**: declares expected resources for incoming nodes. This is how Kompakt knows the node's capacity before it arrives.
+- **`nodeGroupTemplates`**: declares expected properties for incoming nodes. The `allocatable` field is optional if using `capacitySource.type: NodeAllocatable`, because the kubelet reports real allocatable resources before the node reaches `Ready`. It is recommended for `capacitySource.type: NodeLabel` (cGPU) where label-based capacity is not available until the device plugin runs.
 - **`WaitForNodeReady`**: the only rule needed for scale-from-zero. No BinPack rule because there are no existing nodes to pack onto.
 - **`requiredLabels`**: waits for the cGPU device plugin labels before considering the node ready. GPU nodes often reach `Ready=True` before the device plugin registers.
 

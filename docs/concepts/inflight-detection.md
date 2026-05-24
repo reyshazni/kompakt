@@ -59,14 +59,16 @@ The instance type is matched against `nodeGroupTemplates` in the PackingProfile 
 
 ## Template enrichment
 
-Detected in-flight nodes often have unknown allocatable resources (the node does not exist yet, so there is nothing to read). The `nodeGroupTemplates` field in `capacitySource` provides this information. See [Node Group Templates](../reference/node-group-templates.md) for configuration.
+Layer 1 in-flight nodes (detected from CA ConfigMap or GOATScaler events) do not exist in Kubernetes yet, so there is nothing to read from the API. The `nodeGroupTemplates` field in `capacitySource` provides expected allocatable resources, labels, and taints. See [Node Group Templates](../reference/node-group-templates.md) for configuration.
 
-Matching priority:
+Layer 2 in-flight nodes (NotReadyNodeDetector) already exist as Node objects. The kubelet reports `allocatable` resources before the node reaches `Ready`, so the `allocatable` field in the template is optional for this layer. Labels and taints in the template are still useful for matching during the Layer 1 window.
+
+Template matching priority:
 
 1. `instanceType`: matched against the instance type from GOATScaler events
 2. `namePrefix`: matched against the node name from CA status
 
-Without templates, in-flight nodes have unknown capacity and WaitForNodeReady cannot hold pods for them.
+Without templates, Layer 1 in-flight nodes have unknown capacity and WaitForNodeReady falls back to Layer 2 (waiting for the NotReady node to appear, then reading real allocatable from the kubelet).
 
 ## Fallback behavior
 

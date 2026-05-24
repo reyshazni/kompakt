@@ -1,6 +1,9 @@
 # Node Group Templates Reference
 
-`nodeGroupTemplates` declare the expected capacity of nodes that do not yet exist. Without a template, Kompakt cannot match pending pods to in-flight nodes, and the `WaitForNodeReady` rule will not function.
+`nodeGroupTemplates` declare expected properties (capacity, labels, taints) of nodes that do not yet exist. Templates enable `WaitForNodeReady` to match gated pods to in-flight nodes before those nodes join the cluster.
+
+!!! note
+    Templates are required for Layer 1 in-flight detection (CA ConfigMap, GOATScaler events), where the node does not exist in Kubernetes yet. For Layer 2 (NotReadyNodeDetector), the node object already exists and the kubelet reports `allocatable` resources before the node reaches `Ready`. In that case, the `allocatable` field in the template is optional because Kompakt reads real values from the node. Labels and taints in the template are still useful for nodeSelector and toleration matching during the Layer 1 window.
 
 ## Schema
 
@@ -9,7 +12,7 @@ spec:
   capacitySource:
     nodeGroupTemplates:
       - namePrefix: <string>       # required: prefix matching the node group name
-        allocatable:               # required: expected resources as milliValues
+        allocatable:               # optional: expected resources as milliValues (auto-read from NotReady nodes)
           <resource>: <int64>
           <resource>: <int64>
         labels:                    # optional: expected node labels
@@ -134,6 +137,10 @@ nodeGroupTemplates:
 ```
 
 Kompakt matches in-flight nodes to templates by prefix. The first matching template is used.
+
+## When `allocatable` is optional
+
+- **`capacitySource.type: NodeAllocatable`**: The kubelet reports `allocatable` on NotReady nodes before they reach `Ready`. Kompakt reads these real values automatically. You can omit `allocatable` in the template and still declare `labels` and `taints` for nodeSelector/toleration matching during the Layer 1 detection window.
 
 ## When templates are NOT needed
 
