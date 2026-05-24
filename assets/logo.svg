@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- Kompakt: four paths from four directions converging into one compact center -->
+  <!-- Each path represents a workload arriving from a different direction -->
+  <!-- They meet at the center and interlock, forming a tight knot -->
+  <!-- The negative space in the center is a small square: the compact result -->
+
+  <!-- From top, turns right -->
+  <path d="M 256 64 L 256 208 L 320 208" stroke="white" stroke-width="48" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- From right, turns down -->
+  <path d="M 448 256 L 304 256 L 304 320" stroke="white" stroke-width="48" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- From bottom, turns left -->
+  <path d="M 256 448 L 256 304 L 192 304" stroke="white" stroke-width="48" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+
+  <!-- From left, turns up -->
+  <path d="M 64 256 L 208 256 L 208 192" stroke="white" stroke-width="48" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
